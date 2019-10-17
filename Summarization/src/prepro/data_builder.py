@@ -276,7 +276,7 @@ def format_to_bert(args):
     if (args.dataset != ''):
         datasets = [args.dataset]
     else:
-        datasets = ['train', 'valid', 'test']
+        datasets = ['dev', 'train', 'test']
     for corpus_type in datasets:
         a_lst = []
         for json_f in glob.glob(pjoin(args.raw_path, '*' + corpus_type + '.*.json')):
@@ -437,3 +437,45 @@ def _format_xsum_to_lines(params):
             tgt.append(sent.split())
         return {'src': source, 'tgt': tgt}
     return None
+
+
+def format_xsum_to_lines_easy(args):
+    if (args.dataset != ''):
+        datasets = [args.dataset]
+    else:
+        datasets = ['train', 'test', 'dev']
+
+    for corpus_type in datasets:
+        root_src = args.raw_path + corpus_type + "_src.jsonl"
+        root_tgt = args.raw_path + corpus_type + "_tgt.jsonl"
+
+        srcs = []
+        for line in open(root_src):
+            srcs.append([sen.split() for sen in line.strip().split("\t")])
+        tgts = []
+        for line in open(root_tgt):
+            tgts.append(line.strip().split())
+
+        json_objs = []
+        for i, src in enumerate(srcs):
+            json_objs.append({'src': src, 'tgt': [tgts[i]]})
+
+        dataset = []
+        p_ct = 0
+        for d in json_objs:
+            if (d is None):
+                continue
+            dataset.append(d)
+            if (len(dataset) > args.shard_size):
+                pt_file = "{:s}.{:s}.{:d}.json".format(args.save_path, corpus_type, p_ct)
+                with open(pt_file, 'w') as save:
+                    save.write(json.dumps(dataset))
+                    p_ct += 1
+                    dataset = []
+
+        if (len(dataset) > 0):
+            pt_file = "{:s}.{:s}.{:d}.json".format(args.save_path, corpus_type, p_ct)
+            with open(pt_file, 'w') as save:
+                save.write(json.dumps(dataset))
+                p_ct += 1
+                dataset = []

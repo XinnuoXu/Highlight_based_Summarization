@@ -16,7 +16,7 @@ python train.py \
 	-use_interval true \
 	-visible_gpus 2 \
 	-max_pos 512 \
-	-max_length 200 \
-	-alpha 0.95 \
-	-min_length 50 \
+	-max_length 100 \
+	-alpha 0.9 \
+	-min_length 20 \
 	-result_path ../logs/abs_bert_cnndm
