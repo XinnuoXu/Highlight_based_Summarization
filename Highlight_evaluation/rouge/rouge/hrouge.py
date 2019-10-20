@@ -40,10 +40,10 @@ class FilesHRouge:
 
 
 class HRouge:
-    DEFAULT_METRICS = ["rouge-1", "rouge-2", "rouge-l"]
+    DEFAULT_METRICS = ["rouge-1", "rouge-2"]
     AVAILABLE_METRICS = {
-        "rouge-1": lambda hyp, ref: rouge_score.rouge_n(hyp, ref, 1),
-        "rouge-2": lambda hyp, ref: rouge_score.rouge_n(hyp, ref, 2),
+        "rouge-1": lambda hyp, ref, ref_weight: rouge_score.rouge_n(hyp, ref, ref_weight, 1),
+        "rouge-2": lambda hyp, ref, ref_weight: rouge_score.rouge_n(hyp, ref, ref_weight, 2),
         "rouge-l": lambda hyp, ref:
             rouge_score.rouge_l_summary_level(hyp, ref),
     }
@@ -133,12 +133,11 @@ class HRouge:
             if len(sen_ref) > 0:
                 tmp_ref.append(" ".join(sen_ref))
                 tmp_weight.append(sen_weight)
-
             ref = tmp_ref; ref_weight = tmp_weight
 
             for m in self.metrics:
                 fn = HRouge.AVAILABLE_METRICS[m]
-                sc = fn(hyp, ref)
+                sc = fn(hyp, ref, ref_weight)
                 scores[m] = {s: scores[m][s] + sc[s] for s in self.stats}
 
             if self.return_lengths:

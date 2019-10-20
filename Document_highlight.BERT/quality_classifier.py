@@ -350,7 +350,7 @@ class DocSumPair:
         self.recovered_ctx_terms, self.ctx_embs = self.merge_tokens(self.trunc_ctx_tok, self.trunc_ctx_terms, ctx_emb)
 
 class DataSet:
-    def __init__(self, label):
+    def __init__(self, src_path, tgt_path, fpout_path):
         self.model_class = BertModel
         self.tokenizer_class = BertTokenizer
         self.pretrained_weights = 'bert-base-uncased'
@@ -359,14 +359,14 @@ class DataSet:
 
         #self.src_path = '../../fact_data/g2g/xsum_' + label + '_src.jsonl'
         #self.tgt_path = '../../fact_data/g2g/xsum_' + label + '_tgt.jsonl'
-        self.src_path = "./tmp_data/corpus_g2g_" + label + "_src_.txt"
-        self.tgt_path = "./tmp_data/corpus_g2g_" + label + "_tgt_.txt"
+        self.src_path = src_path
+        self.tgt_path = tgt_path
         self.in_src = [line.strip().encode("ascii", "ignore").decode("ascii", "ignore") for line in open(self.src_path)]
         self.in_tgt = [line.strip().encode("ascii", "ignore").decode("ascii", "ignore") for line in open(self.tgt_path)]
 
-        self.stop_words = [term.strip() for term in open("../stop_words.txt")]
+        self.stop_words = [term.strip() for term in open("./stop_words.txt")]
 
-        self.fpout = open('/scratch/xxu/highlights.bert/xsum_' + label + '.jsonl', 'w')
+        self.fpout = open(fpout_path, 'w')
 
     def clean(self, line):
         flist = [item for item in line.strip().split(" ") if len(item) > 0]
@@ -423,5 +423,8 @@ class DataSet:
                 self.fpout.write(json_str + "\n")
 
 if __name__ == '__main__':
-    dataset = DataSet(sys.argv[1])
+    src_path = "./tmp_data/corpus_g2g_" + sys.argv[1] + "_src_.txt"
+    tgt_path = "./tmp_data/corpus_g2g_" + sys.argv[1] + "_tgt_.txt"
+    fpout_path = '/scratch/xxu/highlights.bert/xsum_' + sys.argv[1] + '.jsonl'
+    dataset = DataSet(src_path, tgt_path, fpout_path)
     dataset.preprocess()

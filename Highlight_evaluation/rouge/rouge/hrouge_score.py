@@ -29,7 +29,7 @@ from __future__ import division, print_function, unicode_literals
 import itertools
 
 
-def _get_ngrams(n, text):
+def _get_ngrams(n, text, weights=None):
     """Calcualtes n-grams.
 
     Args:
@@ -43,23 +43,47 @@ def _get_ngrams(n, text):
     text_length = len(text)
     max_index_ngram_start = text_length - n
     for i in range(max_index_ngram_start + 1):
-        ngram_set.add(tuple(text[i:i + n]))
-    return ngram_set
+        pair = tuple(text[i:i + n])
+        ngram_set.add(pair)
+
+    if weights is not None:
+        weight_dict = {}; count_dict = {}
+        for i in range(max_index_ngram_start + 1):
+            pair = tuple(text[i:i + n])
+            if pair not in weight_dict:
+                weight_dict[pair] = sum(weights[i:i + n]) / n
+                count_dict[pair] = 1
+            else:
+                weight_dict[pair] += sum(weights[i:i + n]) / n
+                count_dict[pair] += 1
+        for pair in weight_dict:
+            weight_dict[pair] = weight_dict[pair] / count_dict[pair]
+    else:
+        weight_dict = None
+    return ngram_set, weight_dict
 
 
 def _split_into_words(sentences):
     """Splits multiple sentences into words and flattens the result"""
     return list(itertools.chain(*[_.split(" ") for _ in sentences]))
 
+def _split_into_weights(weight):
+    """Splits multiple sentences into words and flattens the result"""
+    return list(itertools.chain(*[_ for _ in weight]))
 
-def _get_word_ngrams(n, sentences):
+
+def _get_word_ngrams(n, sentences, weights=None):
     """Calculates word n-grams for multiple sentences.
     """
     assert len(sentences) > 0
     assert n > 0
 
     words = _split_into_words(sentences)
-    return _get_ngrams(n, words)
+    if weights is not None:
+        weights = _split_into_weights(weights)
+    else:
+        weights = None
+    return _get_ngrams(n, words, weights)
 
 
 def _len_lcs(x, y):
@@ -174,7 +198,7 @@ def multi_rouge_n(sequences, scores_ids, n=2):
     return scores
 
 
-def rouge_n(evaluated_sentences, reference_sentences, n=2):
+def rouge_n(evaluated_sentences, reference_sentences, reference_weight, n=2):
     """
     Computes ROUGE-N of two text collections of sentences.
     Sourece: http://research.microsoft.com/en-us/um/people/cyl/download/
@@ -197,14 +221,16 @@ def rouge_n(evaluated_sentences, reference_sentences, n=2):
     if len(reference_sentences) <= 0:
         raise ValueError("Reference is empty.")
 
-    evaluated_ngrams = _get_word_ngrams(n, evaluated_sentences)
-    reference_ngrams = _get_word_ngrams(n, reference_sentences)
+    evaluated_ngrams, _ = _get_word_ngrams(n, evaluated_sentences, weights=None)
+    reference_ngrams, reference_ngrams_weight = _get_word_ngrams(n, reference_sentences, weights=reference_weight)
     reference_count = len(reference_ngrams)
     evaluated_count = len(evaluated_ngrams)
 
     # Gets the overlapping ngrams between evaluated and reference
-    overlapping_ngrams = evaluated_ngrams.intersection(reference_ngrams)
-    overlapping_count = len(overlapping_ngrams)
+    overlapping_count = 0.0
+    for pair in evaluated_ngrams:
+        if pair in reference_ngrams:
+            overlapping_count += reference_ngrams_weight[pair]
 
     return f_r_p_rouge_n(evaluated_count, reference_count, overlapping_count)
 

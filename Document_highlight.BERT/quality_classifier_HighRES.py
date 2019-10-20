@@ -39,7 +39,7 @@ def _re_score(article_lst, sum_dists):
                 fact_score_stack.pop()
             elif pop_type == "phrase":
                 label_score_stack.pop()
-        else:
+        elif token_type != "reference":
             tokens.append(token)
             label_score = label_score_stack[-1] if len(label_score_stack) > 0 else 0.0
             fact_score = fact_score_stack[-1] if len(fact_score_stack) > 0 else 0.0
@@ -55,31 +55,29 @@ def _document(article_lst, attn_dists):
 def _summary(decoded_lst, p_gens):
     return _re_score(decoded_lst, p_gens)
 
-def highlight(file_name):
-    for i, line in enumerate(open(file_name)):
-        json_obj = json.loads(line.strip())
-        article_lst = json_obj['article_lst']
-        decoded_lst = json_obj['decoded_lst']
-        abstract_str = json_obj['abstract_str']
-        attn_dists = json_obj['attn_dists']
-        p_gens = json_obj['p_gens']
-        article_lst, doc_highlight = _document(article_lst, attn_dists)
-        decoded_lst, p_gens = _summary(decoded_lst, p_gens)
+def highlight(line):
+    json_obj = json.loads(line.strip())
+    article_lst = json_obj['article_lst']
+    decoded_lst = json_obj['decoded_lst']
+    abstract_str = json_obj['abstract_str']
+    attn_dists = json_obj['attn_dists']
+    p_gens = json_obj['p_gens']
+    article_lst, doc_highlight = _document(article_lst, attn_dists)
+    decoded_lst, p_gens = _summary(decoded_lst, p_gens)
 
-        attn_dists = [np.zeros(len(article_lst)).tolist()] * len(decoded_lst)
-        attn_dists.insert(0, doc_highlight)
-        decoded_lst.insert(0, "[SUMMARY]")
-        p_gens.insert(0, 1.0)
+    attn_dists = [np.zeros(len(article_lst)).tolist()] * len(decoded_lst)
+    attn_dists.insert(0, doc_highlight)
+    decoded_lst.insert(0, "[SUMMARY]")
+    p_gens.insert(0, 1.0)
 
-        fpout = open("./tmp_output.examples/" + str(i) + ".json", "w")
-        json_obj = {}
-        json_obj["article_lst"] = article_lst
-        json_obj["decoded_lst"] = decoded_lst
-        json_obj["abstract_str"] = abstract_str
-        json_obj["attn_dists"] = attn_dists
-        json_obj["p_gens"] = p_gens
-        fpout.write(json.dumps(json_obj) + "\n")
-        fpout.close()
+    json_obj = {}
+    json_obj["article_lst"] = article_lst
+    json_obj["decoded_lst"] = decoded_lst
+    json_obj["abstract_str"] = abstract_str
+    json_obj["attn_dists"] = attn_dists
+    json_obj["p_gens"] = p_gens
+
+    return json_obj
 
 def select(file_name, file_selected_articles):
     SAMPLE_NUM = 3
@@ -104,4 +102,8 @@ if __name__ == '__main__':
         file_name = "/scratch/xxu/highlights.bert/xsum_" + sys.argv[2] + ".jsonl"
         select(file_name, file_selected_articles)
     if sys.argv[1] == "highlight":
-        highlight(file_selected_articles)
+        for i, line in enumerate(open(file_selected_articles)):
+            json_obj = highlight(line)
+            fpout = open("./tmp_output.examples/" + str(i) + ".json", "w")
+            fpout.write(json.dumps(json_obj) + "\n")
+            fpout.close()
