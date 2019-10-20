@@ -1,6 +1,6 @@
 #!/bin/bash
 
-BERT_DATA_PATH=/scratch/xxu/bert/xsum
+BERT_DATA_PATH=/scratch/xxu/bert/data/xsum
 MODEL_PATH=/scratch/xxu/bert/models/
 
 python train.py \
@@ -16,7 +16,7 @@ python train.py \
 	-use_interval true \
 	-visible_gpus 2 \
 	-max_pos 512 \
+	-min_length 20 \
 	-max_length 100 \
 	-alpha 0.9 \
-	-min_length 20 \
 	-result_path ../logs/abs_bert_cnndm
