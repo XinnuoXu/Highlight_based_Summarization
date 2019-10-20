@@ -1,6 +1,6 @@
 #!/bin/bash
 
-RAW_PATH=../../../fact_data/s2s/xsum_
+RAW_PATH=../../../fact_data/s2s_bert/xsum_
 JSON_PATH=/scratch/xxu/bert/jsons/xsum
 
 python preprocess.py \

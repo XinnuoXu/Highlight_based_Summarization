@@ -1,10 +1,9 @@
 #!/bin/bash
 
-BERT_DATA_PATH=/scratch/xxu/bert/xsum
+BERT_DATA_PATH=/scratch/xxu/bert/data/xsum
 MODEL_PATH=/scratch/xxu/bert/models/
 
 python train.py  \
-	-train_from /scratch/xxu/bert/models/model_step_110000.pt \
 	-task abs \
 	-mode train \
 	-bert_data_path ${BERT_DATA_PATH} \
@@ -18,6 +17,7 @@ python train.py  \
 	-train_steps 200000 \
 	-report_every 50 \
 	-accum_count 5 \
+	-seed 777 \
 	-use_bert_emb true \
 	-use_interval true \
 	-warmup_steps_bert 20000 \
