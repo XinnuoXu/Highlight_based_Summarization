@@ -73,9 +73,10 @@ def _merge_weight(decoded_lst, attn_dists):
         elif token_type != "reference":
             tokens.append(token)
             score = attn_dists[i]
-            if type_stack[-1] == "phrase":
+            if len(type_stack) > 0 and type_stack[-1] == "phrase" and len(label_score_stack) > 0:
                 score += label_score_stack[-1]
-            score += fact_score_stack[-1]
+            if len(fact_score_stack) > 0:
+                score += fact_score_stack[-1]
             scores.append(score)
     return tokens, scores
 
@@ -90,26 +91,44 @@ def _rephrase(article_lst):
 def _alignment(article_lst, decoded_lst, attn_dists, p_gens):
     attn_dists = np.array(attn_dists)
     sum_dists = np.amax(attn_dists, axis=0)
-    tokens, scores = _merge_weight(decoded_lst, attn_dists)
+    decoded_lst, scores = _merge_weight(decoded_lst, attn_dists)
     scores.insert(0, sum_dists)
-    tokens.insert(0, "[SUMMARY]")
+    decoded_lst.insert(0, "[SUMMARY]")
     p_gens.insert(0, 1.0)
     scores = [_re_score(article_lst, score) for score in scores]
     article_lst = _rephrase(article_lst)
-    print (len(article_lst))
-    print (len(scores[0]))
+    return article_lst, decoded_lst, scores
 
-def _summary(decoded_lst, p_gens):
-    return _re_score(decoded_lst, p_gens)
+def _split_doc(article_lst, attn_dists, split_info):
+    cut_pos = [0]
+    for sen in split_info:
+        cut_pos.append(cut_pos[-1] + len(sen))
+    cut_attn_dists = [[] for item in attn_dists] 
+    cut_attn_dists.append([])
+    sen_idx = 0
+    for i, tok in enumerate(article_lst):
+        if i == cut_pos[sen_idx]:
+            for j in range(len(cut_attn_dists)):
+                cut_attn_dists[j].append([])
+            sen_idx+=1
+        for j in range(len(attn_dists)):
+            cut_attn_dists[j][-1].append(attn_dists[j][i])
+        cut_attn_dists[-1][-1].append(tok)
+    return cut_attn_dists[-1], cut_attn_dists[:-1]
 
 def _one_file(label):
     sen_split_path = "./tmp_data/" + "corpus_g2g_" + label + ".txt"
     docs = []; summs = []
     for line in open(sen_split_path):
         flist = line.strip().split("\t")
-        docs.append(flist[:-1])
+        doc = flist[:-1]
+        docs.append([_rephrase(sen.split(' ')) for sen in doc])
         summs.append(flist[-1])
+
     file_name = "/scratch/xxu/highlights/xsum_" + label + ".jsonl"
+    fpout_dir = "tmp_output.thres/" + label + ".jsonl"
+    fpout = open(fpout_dir, "w")
+
     for i, line in enumerate(open(file_name)):
         json_obj = json.loads(line.strip())
         article_lst = json_obj['article_lst']
@@ -118,33 +137,10 @@ def _one_file(label):
         attn_dists = json_obj['attn_dists']
         p_gens = json_obj['p_gens']
 
-        _alignment(article_lst, decoded_lst, attn_dists, p_gens)
-        #p_gens = _summary(decoded_lst, p_gens)
+        p_gens = _re_score(decoded_lst, p_gens)
+        article_lst, decoded_lst, attn_dists = _alignment(article_lst, decoded_lst, attn_dists, p_gens)
+        article_lst, attn_dists = _split_doc(article_lst, attn_dists, docs[i])
 
-if __name__ == '__main__':
-    _one_file("111")
-    #for filename in os.listdir("/scratch/xxu/highlights/"):
-    #    label = filename.replace("xsum_", "").replace(".jsonl", "")
-    #    _one_file(label)
-
-    '''
-    file_name = "/scratch/xxu/highlights/xsum_" + sys.argv[1] + ".jsonl"
-    for i, line in enumerate(open(file_name)):
-        json_obj = json.loads(line.strip())
-        article_lst = json_obj['article_lst']
-        decoded_lst = json_obj['decoded_lst']
-        abstract_str = json_obj['abstract_str']
-        attn_dists = json_obj['attn_dists']
-        p_gens = json_obj['p_gens']
-        article_lst, doc_highlight = _document(article_lst, attn_dists)
-        decoded_lst, p_gens = _summary(decoded_lst, p_gens)
-
-        attn_dists = [np.zeros(len(article_lst)).tolist()] * len(decoded_lst)
-        attn_dists.insert(0, doc_highlight)
-        decoded_lst.insert(0, "[SUMMARY]")
-        p_gens.insert(0, 1.0)
-
-        fpout = open("tmp_output.thres/" + str(i) + ".json", "w")
         json_obj = {}
         json_obj["article_lst"] = article_lst
         json_obj["decoded_lst"] = decoded_lst
@@ -152,5 +148,19 @@ if __name__ == '__main__':
         json_obj["attn_dists"] = attn_dists
         json_obj["p_gens"] = p_gens
         fpout.write(json.dumps(json_obj) + "\n")
+        
+        '''
+        fpout = open("tmp_output.thres/" + str(i) + ".json", "w")
+        fpout.write(json.dumps(json_obj) + "\n")
         fpout.close()
-    '''
+        '''
+
+    fpout.close()
+
+if __name__ == '__main__':
+    if sys.argv[1] == "onefile":
+        _one_file(sys.argv[2])
+    if sys.argv[1] == "multi_thread":
+        for filename in os.listdir("/scratch/xxu/highlights/"):
+            label = filename.replace("xsum_", "").replace(".jsonl", "")
+            os.system("nohup python highlight_alignment.py onefile " + label + " &")
