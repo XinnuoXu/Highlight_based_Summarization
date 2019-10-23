@@ -6,6 +6,7 @@ import json
 import os
 import random
 import re
+import copy
 import subprocess
 from collections import Counter
 from os.path import join as pjoin
@@ -219,7 +220,50 @@ class BertData():
         self.cls_vid = self.tokenizer.vocab[self.cls_token]
         self.pad_vid = self.tokenizer.vocab[self.pad_token]
 
-    def preprocess(self, src, tgt, sent_labels, use_bert_basic_tokenizer=False, is_test=False):
+    def reshape_alignment(self, idxs, max_src_ntokens_per_sent, max_src_nsents, alignment):
+        new_alignment = []
+        for j in range(len(alignment)):
+            alg = [alignment[j][i][:max_src_ntokens_per_sent] for i in idxs][:max_src_nsents]
+            new_alignment.append(alg)
+        return new_alignment
+
+    def cls_alignment(self, alignment):
+        new_alignment = []
+        for j in range(len(alignment)):
+            alg = []
+            for item in alignment[j]:
+                alg.append(sum(item)/len(item))
+                alg.extend(item)
+                alg.append(0.0)
+            new_alignment.append(alg)
+        return new_alignment
+
+    def tokenize_alignment(self, src_subtokens, alignment):
+        new_alignment = []
+        for j in range(len(alignment)):
+            alg = []; idx = 0
+            for i, tok in enumerate(src_subtokens):
+                if tok.startswith("##") and tok != "##":
+                    alg.append(alg[-1])
+                else:
+                    alg.append(alignment[j][idx])
+                    idx += 1
+            new_alignment.append(alg)
+        return new_alignment
+
+    def tgt_alignment(self, alignment, tgt_subtokens_str):
+        new_alignment = []; idx = 0
+        alignment.append(copy.deepcopy(alignment[-1]))
+        for i, tok in enumerate(tgt_subtokens_str.split(" ")):
+            if tok.startswith("##") and tok != "##":
+                new_alignment.append(copy.deepcopy(new_alignment[-1]))
+            else:
+                new_alignment.append(alignment[idx])
+                idx += 1
+        return new_alignment
+
+
+    def preprocess(self, src, tgt, alignment, sent_labels, use_bert_basic_tokenizer=False, is_test=False):
 
         if ((not is_test) and len(src) == 0):
             return None
@@ -232,9 +276,13 @@ class BertData():
         for l in sent_labels:
             _sent_labels[l] = 1
 
+        # Cut src
         src = [src[i][:self.args.max_src_ntokens_per_sent] for i in idxs]
-        sent_labels = [_sent_labels[i] for i in idxs]
         src = src[:self.args.max_src_nsents]
+        # Cut alignment
+        alignment = self.reshape_alignment(idxs, self.args.max_src_ntokens_per_sent, self.args.max_src_nsents, alignment)
+        # Cut sent_labels
+        sent_labels = [_sent_labels[i] for i in idxs]
         sent_labels = sent_labels[:self.args.max_src_nsents]
 
         if ((not is_test) and len(src) < self.args.min_src_nsents):
@@ -242,10 +290,14 @@ class BertData():
 
         src_txt = [' '.join(sent) for sent in src]
         text = ' {} {} '.format(self.sep_token, self.cls_token).join(src_txt)
-
         src_subtokens = self.tokenizer.tokenize(text)
-
         src_subtokens = [self.cls_token] + src_subtokens + [self.sep_token]
+
+        # add [SEP] [CLS] score for alignment
+        alignment = self.cls_alignment(alignment)
+        # Change alignment as the tokenize res
+        alignment = self.tokenize_alignment(src_subtokens, alignment)
+
         src_subtoken_idxs = self.tokenizer.convert_tokens_to_ids(src_subtokens)
         _segs = [-1] + [i for i, t in enumerate(src_subtoken_idxs) if t == self.sep_vid]
         segs = [_segs[i] - _segs[i - 1] for i in range(1, len(_segs))]
@@ -258,8 +310,21 @@ class BertData():
         cls_ids = [i for i, t in enumerate(src_subtoken_idxs) if t == self.cls_vid]
         sent_labels = sent_labels[:len(cls_ids)]
 
-        tgt_subtokens_str = '[unused0] ' + ' [unused2] '.join(
-            [' '.join(self.tokenizer.tokenize(' '.join(tt), use_bert_basic_tokenizer=use_bert_basic_tokenizer)) for tt in tgt]) + ' [unused1]'
+        
+        '''
+        temp codes start
+        '''
+        tgt = tgt[0]
+        tgt = tgt[1:] #tgt = [[SUMMARY] tok1 tok2 tok3]
+        tgt_subtokens_str = '[unused0] ' + ' '.join(self.tokenizer.tokenize(' '.join(tgt), use_bert_basic_tokenizer=use_bert_basic_tokenizer)) + ' [unused1]'
+        alignment = self.tgt_alignment(alignment, tgt_subtokens_str)
+        '''
+        temp codes end
+        '''
+
+        #tgt_subtokens_str = '[unused0] ' + ' [unused2] '.join(
+        #    [' '.join(self.tokenizer.tokenize(' '.join(tt), use_bert_basic_tokenizer=use_bert_basic_tokenizer)) for tt in tgt]) + ' [unused1]'
+
         tgt_subtoken = tgt_subtokens_str.split()[:self.args.max_tgt_ntokens]
         if ((not is_test) and len(tgt_subtoken) < self.args.min_tgt_ntokens):
             return None
@@ -269,7 +334,7 @@ class BertData():
         tgt_txt = '<q>'.join([' '.join(tt) for tt in tgt])
         src_txt = [original_src_txt[i] for i in idxs]
 
-        return src_subtoken_idxs, sent_labels, tgt_subtoken_idxs, segments_ids, cls_ids, src_txt, tgt_txt
+        return src_subtoken_idxs, sent_labels, tgt_subtoken_idxs, segments_ids, cls_ids, src_txt, tgt_txt, alignment
 
 
 def format_to_bert(args):
@@ -290,7 +355,6 @@ def format_to_bert(args):
         pool.close()
         pool.join()
 
-
 def _format_to_bert(params):
     corpus_type, json_file, args, save_file = params
     is_test = corpus_type == 'test'
@@ -304,22 +368,28 @@ def _format_to_bert(params):
     jobs = json.load(open(json_file))
     datasets = []
     for d in jobs:
-        source, tgt = d['src'], d['tgt']
+        d = json.loads(d)
+        source, tgt, alignment = d['src'], d['tgt'], d['alignment']
+
+        # temp code
+        tgt = [tgt]
+        # temp code end
 
         sent_labels = greedy_selection(source[:args.max_src_nsents], tgt, 3)
         if (args.lower):
             source = [' '.join(s).lower().split() for s in source]
             tgt = [' '.join(s).lower().split() for s in tgt]
-        b_data = bert.preprocess(source, tgt, sent_labels, use_bert_basic_tokenizer=args.use_bert_basic_tokenizer,
-                                 is_test=is_test)
+        b_data = bert.preprocess(source, tgt, alignment, sent_labels, \
+                use_bert_basic_tokenizer=args.use_bert_basic_tokenizer, \
+                is_test=is_test)
         # b_data = bert.preprocess(source, tgt, sent_labels, use_bert_basic_tokenizer=args.use_bert_basic_tokenizer)
 
         if (b_data is None):
             continue
-        src_subtoken_idxs, sent_labels, tgt_subtoken_idxs, segments_ids, cls_ids, src_txt, tgt_txt = b_data
+        src_subtoken_idxs, sent_labels, tgt_subtoken_idxs, segments_ids, cls_ids, src_txt, tgt_txt, alignment = b_data
         b_data_dict = {"src": src_subtoken_idxs, "tgt": tgt_subtoken_idxs,
                        "src_sent_labels": sent_labels, "segs": segments_ids, 'clss': cls_ids,
-                       'src_txt': src_txt, "tgt_txt": tgt_txt}
+                       'src_txt': src_txt, "tgt_txt": tgt_txt, "alignment": alignment}
         datasets.append(b_data_dict)
     logger.info('Processed instances %d' % len(datasets))
     logger.info('Saving to %s' % save_file)
@@ -466,6 +536,33 @@ def format_xsum_to_lines_easy(args):
             if (d is None):
                 continue
             dataset.append(d)
+            if (len(dataset) > args.shard_size):
+                pt_file = "{:s}.{:s}.{:d}.json".format(args.save_path, corpus_type, p_ct)
+                with open(pt_file, 'w') as save:
+                    save.write(json.dumps(dataset))
+                    p_ct += 1
+                    dataset = []
+
+        if (len(dataset) > 0):
+            pt_file = "{:s}.{:s}.{:d}.json".format(args.save_path, corpus_type, p_ct)
+            with open(pt_file, 'w') as save:
+                save.write(json.dumps(dataset))
+                p_ct += 1
+                dataset = []
+
+def format_xsum_shard_only(args):
+    if (args.dataset != ''):
+        datasets = [args.dataset]
+    else:
+        datasets = ['train', 'test', 'dev']
+
+    for corpus_type in datasets:
+        root = args.raw_path + corpus_type + "_src.jsonl"
+
+        dataset = []; p_ct = 0
+        for line in open(root):
+            json_obj = json.loads(line.strip())
+            dataset.append(json.loads(line.strip()))
             if (len(dataset) > args.shard_size):
                 pt_file = "{:s}.{:s}.{:d}.json".format(args.save_path, corpus_type, p_ct)
                 with open(pt_file, 'w') as save:
