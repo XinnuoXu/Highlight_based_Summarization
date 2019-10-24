@@ -95,8 +95,12 @@ class LossComputeBase(nn.Module):
         return batch_stats
 
     def sharded_compute_loss(self, batch, output,
-                              shard_size,
-                             normalization):
+                             shard_size,
+                             normalization,
+                             src_mem_bank=None, 
+                             alignment=None, 
+                             mask_alg=None,
+                             mask_tgt=None):
         """Compute the forward loss and backpropagate.  Computation is done
         with shards and optionally truncation for memory efficiency.
 
@@ -124,16 +128,25 @@ class LossComputeBase(nn.Module):
             :obj:`onmt.utils.Statistics`: validation loss statistics
 
         """
+        '''
         batch_stats = Statistics()
         shard_state = self._make_shard_state(batch, output)
         for shard in shards(shard_state, shard_size):
             loss, stats = self._compute_loss(batch, **shard)
             loss.div(float(normalization)).backward()
             batch_stats.update(stats)
+        '''
+
+        batch_stats = Statistics()
+
+        loss, stats = self._compute_loss(batch, output, batch.tgt[:,1:], src_mem_bank, alignment, mask_alg, mask_tgt)
+
+        loss.div(float(normalization)).backward()
+        batch_stats.update(stats)
 
         return batch_stats
 
-    def _stats(self, loss, scores, target):
+    def _stats(self, loss, scores, target, other_loss=[], names=[]):
         """
         Args:
             loss (:obj:`FloatTensor`): the loss computed by the loss criterion.
@@ -150,7 +163,7 @@ class LossComputeBase(nn.Module):
                           .sum() \
                           .item()
         num_non_padding = non_padding.sum().item()
-        return Statistics(loss.item(), num_non_padding, num_correct)
+        return Statistics(loss.item(), num_non_padding, num_correct, other_loss=other_loss, names=names)
 
     def _bottle(self, _v):
         return _v.view(-1, _v.size(2))
@@ -205,6 +218,8 @@ class NMTLossCompute(LossComputeBase):
             self.criterion = nn.NLLLoss(
                 ignore_index=self.padding_idx, reduction='sum'
             )
+        self.criterion_attn = nn.CosineEmbeddingLoss(reduce=False)
+        self.softmax = nn.Softmax(dim=-1)
 
     def _make_shard_state(self, batch, output):
         return {
@@ -212,14 +227,34 @@ class NMTLossCompute(LossComputeBase):
             "target": batch.tgt[:,1:],
         }
 
-    def _compute_loss(self, batch, output, target):
+    def _compute_loss(self, batch, output, target, src_mem_bank, alignment, mask_alg, mask_tgt):
+
+        # CosineEmbeddingLoss
+        alignment = alignment[:, :-1, :]
+        mask_alg = mask_alg[:, :-1, :]
+        mask_tgt = mask_tgt[:, :-1]
+
+        attn = torch.matmul(output, src_mem_bank.transpose(1, 2))
+        attn = attn.masked_fill(1-mask_alg, -1e18)
+        attn = self.softmax(attn)
+
+        batch, tgt_len, src_len = alignment.size()
+        alignment = alignment.contiguous().view(-1, src_len)
+        attn = attn.view(-1, src_len)
+        y = torch.ones(attn.size()[0]).cuda()
+        attn_loss = self.criterion_attn(alignment, attn, y)
+        attn_loss = attn_loss.view(batch, tgt_len)
+        attn_loss = attn_loss.masked_fill(1-mask_tgt, 0.0).sum() * 10
+
+        # NLLoss
         bottled_output = self._bottle(output)
         scores = self.generator(bottled_output)
         gtruth =target.contiguous().view(-1)
+        nll_loss = self.criterion(scores, gtruth)
 
-        loss = self.criterion(scores, gtruth)
-
-        stats = self._stats(loss.clone(), scores, gtruth)
+        loss = nll_loss + attn_loss
+        stats = self._stats(loss.clone(), scores, gtruth, \
+                other_loss=[attn_loss.item(), nll_loss.item()], names=["attn_loss", "nll_loss"])
 
         return loss, stats
 

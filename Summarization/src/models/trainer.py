@@ -216,12 +216,16 @@ class Trainer(object):
             tgt = batch.tgt
             segs = batch.segs
             clss = batch.clss
+            alignment = batch.alignment
+
             mask_src = batch.mask_src
             mask_tgt = batch.mask_tgt
             mask_cls = batch.mask_cls
+            mask_alg = batch.mask_alg
 
-            outputs, scores = self.model(src, tgt,segs, clss, mask_src, mask_tgt, mask_cls)
-            batch_stats = self.loss.sharded_compute_loss(batch, outputs, self.args.generator_shard_size, normalization)
+            outputs, scores, src_mem_bank = self.model(src, tgt,segs, clss, mask_src, mask_tgt, mask_cls)
+            batch_stats = self.loss.sharded_compute_loss(batch, outputs, self.args.generator_shard_size, normalization, \
+                    src_mem_bank=src_mem_bank, alignment=alignment, mask_alg=mask_alg, mask_tgt=mask_tgt)
 
             batch_stats.n_docs = int(src.size(0))
 

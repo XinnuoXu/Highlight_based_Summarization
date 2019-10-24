@@ -2,6 +2,7 @@ import bisect
 import gc
 import glob
 import random
+import numpy as np
 
 import torch
 
@@ -16,6 +17,22 @@ class Batch(object):
         rtn_data = [d + [pad_id] * (width - len(d)) for d in data]
         return rtn_data
 
+    def _pad_alignment(self, data, pad_number, eps=1e-8):
+        width_tgt = max(len(d) for d in data)
+        width_src = max(len(d[0]) for d in data)
+        rtn_data = [];
+        for ex in data:
+            ex = np.array(ex)
+            ex = np.add(ex, eps)
+            norm = np.sum(ex, axis=1)
+            ex = ex / norm[:, None]
+            ex = ex.tolist()
+            ex = [row + [pad_number] * (width_src - len(row)) for row in ex]
+            for i in range(len(ex), width_tgt):
+                ex.append([0] * width_src)
+            rtn_data.append(ex)
+        return rtn_data
+
     def __init__(self, data=None, device=None, is_test=False):
         """Create a Batch from a list of examples."""
         if data is not None:
@@ -25,6 +42,11 @@ class Batch(object):
             pre_segs = [x[2] for x in data]
             pre_clss = [x[3] for x in data]
             pre_src_sent_labels = [x[4] for x in data]
+
+            if not is_test:
+                pre_alignment = [x[5] for x in data]
+                alignment = torch.tensor(self._pad_alignment(pre_alignment, 0))
+                mask_alg = 1 - (alignment == 0)
 
             src = torch.tensor(self._pad(pre_src, 0))
             tgt = torch.tensor(self._pad(pre_tgt, 0))
@@ -55,6 +77,9 @@ class Batch(object):
                 setattr(self, 'src_str', src_str)
                 tgt_str = [x[-1] for x in data]
                 setattr(self, 'tgt_str', tgt_str)
+            else:
+                setattr(self, 'alignment', alignment.to(device))
+                setattr(self, 'mask_alg', mask_alg.to(device))
 
     def __len__(self):
         return self.batch_size
@@ -200,9 +225,15 @@ class DataIterator(object):
         clss = ex['clss']
         src_txt = ex['src_txt']
         tgt_txt = ex['tgt_txt']
+        alignment = ex['alignment']
 
         end_id = [src[-1]]
         src = src[:-1][:self.args.max_pos - 1] + end_id
+
+        for i in range(len(alignment)):
+            end_s = [alignment[i][-1]]
+            alignment[i] = alignment[i][:-1][:self.args.max_pos - 1] + end_s
+
         segs = segs[:self.args.max_pos]
         max_sent_id = bisect.bisect_left(clss, self.args.max_pos)
         src_sent_labels = src_sent_labels[:max_sent_id]
@@ -214,7 +245,7 @@ class DataIterator(object):
         if(is_test):
             return src, tgt, segs, clss, src_sent_labels, src_txt, tgt_txt
         else:
-            return src, tgt, segs, clss, src_sent_labels
+            return src, tgt, segs, clss, src_sent_labels, alignment
 
     def batch_buffer(self, data, batch_size):
         minibatch, size_so_far = [], 0
@@ -310,9 +341,15 @@ class TextDataloader(object):
         clss = ex['clss']
         src_txt = ex['src_txt']
         tgt_txt = ex['tgt_txt']
+        alignment = ex['alignment']
 
         end_id = [src[-1]]
         src = src[:-1][:self.args.max_pos - 1] + end_id
+
+        for i in range(len(alignment)):
+            end_s = [alignment[i][-1]]
+            alignment[i] = alignment[i][:-1][:self.args.max_pos - 1] + end_s
+
         segs = segs[:self.args.max_pos]
         max_sent_id = bisect.bisect_left(clss, self.args.max_pos)
         src_sent_labels = src_sent_labels[:max_sent_id]
@@ -322,7 +359,7 @@ class TextDataloader(object):
         if (is_test):
             return src, tgt, segs, clss, src_sent_labels, src_txt, tgt_txt
         else:
-            return src, tgt, segs, clss, src_sent_labels
+            return src, tgt, segs, clss, src_sent_labels, alignment
 
     def batch_buffer(self, data, batch_size):
         minibatch, size_so_far = [], 0

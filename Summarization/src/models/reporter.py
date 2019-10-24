@@ -165,12 +165,14 @@ class Statistics(object):
     * elapsed time
     """
 
-    def __init__(self, loss=0, n_words=0, n_correct=0):
+    def __init__(self, loss=0, n_words=0, n_correct=0, other_loss=[], names=[]):
         self.loss = loss
         self.n_words = n_words
         self.n_docs = 0
         self.n_correct = n_correct
         self.n_src_words = 0
+        self.other_loss=other_loss
+        self.names=names
         self.start_time = time.time()
 
     @staticmethod
@@ -231,6 +233,13 @@ class Statistics(object):
         self.n_correct += stat.n_correct
         self.n_docs += stat.n_docs
 
+        if len(self.other_loss) == 0:
+            self.other_loss = stat.other_loss
+            self.names = stat.names
+        else:
+            for i in range(len(stat.other_loss)):
+                self.other_loss[i] += stat.other_loss[i]
+
         if update_n_src_words:
             self.n_src_words += stat.n_src_words
 
@@ -246,9 +255,21 @@ class Statistics(object):
         """ compute perplexity """
         return math.exp(min(self.loss / self.n_words, 100))
 
+    def ppl_list(self):
+        """ compute perplexity """
+        return [math.exp(min(loss / self.n_words, 100)) for loss in self.other_loss]
+
     def elapsed_time(self):
         """ compute elapsed time """
         return time.time() - self.start_time
+
+    def output_other_loss(self):
+        llist = self.ppl_list()
+        names = self.names
+        rtn_str = []
+        for i in range(len(llist)):
+            rtn_str.append("ppl_%s: %5.2f;" % (names[i], llist[i]))
+        return " ".join(rtn_str)
 
     def output(self, step, num_steps, learning_rate, start):
         """Write out statistics to stdout.
@@ -260,11 +281,12 @@ class Statistics(object):
         """
         t = self.elapsed_time()
         logger.info(
-            ("Step %2d/%5d; acc: %6.2f; ppl: %5.2f; xent: %4.2f; " +
+            ("Step %2d/%5d; acc: %6.2f; ppl: %5.2f; %s xent: %4.2f; " +
              "lr: %7.8f; %3.0f/%3.0f tok/s; %6.0f sec")
             % (step, num_steps,
                self.accuracy(),
                self.ppl(),
+               self.output_other_loss(),
                self.xent(),
                learning_rate,
                self.n_src_words / (t + 1e-5),

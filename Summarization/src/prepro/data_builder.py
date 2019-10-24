@@ -272,6 +272,9 @@ class BertData():
 
         idxs = [i for i, s in enumerate(src) if (len(s) > self.args.min_src_ntokens_per_sent)]
 
+        if len(idxs) == 0:
+            return None
+
         _sent_labels = [0] * len(src)
         for l in sent_labels:
             _sent_labels[l] = 1
@@ -318,6 +321,7 @@ class BertData():
         tgt = tgt[1:] #tgt = [[SUMMARY] tok1 tok2 tok3]
         tgt_subtokens_str = '[unused0] ' + ' '.join(self.tokenizer.tokenize(' '.join(tgt), use_bert_basic_tokenizer=use_bert_basic_tokenizer)) + ' [unused1]'
         alignment = self.tgt_alignment(alignment, tgt_subtokens_str)
+        alignment = alignment[:self.args.max_tgt_ntokens]
         '''
         temp codes end
         '''
@@ -561,8 +565,7 @@ def format_xsum_shard_only(args):
 
         dataset = []; p_ct = 0
         for line in open(root):
-            json_obj = json.loads(line.strip())
-            dataset.append(json.loads(line.strip()))
+            dataset.append(line.strip())
             if (len(dataset) > args.shard_size):
                 pt_file = "{:s}.{:s}.{:d}.json".format(args.save_path, corpus_type, p_ct)
                 with open(pt_file, 'w') as save:
