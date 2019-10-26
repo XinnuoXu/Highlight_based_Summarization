@@ -24,5 +24,5 @@ python train.py  \
 	-warmup_steps_bert 20000 \
 	-warmup_steps_dec 10000 \
 	-max_pos 512 \
-	-visible_gpus 1,2  \
+	-visible_gpus 0,2  \
 	-log_file ../logs/abs_bert_cnndm

@@ -5,13 +5,12 @@ MODEL_PATH=/scratch/xxu/bert/models.alg/
 
 python train.py \
 	-task abs \
-	-mode validate \
-	-test_all \
+	-mode test \
 	-batch_size 3000 \
 	-test_batch_size 500 \
 	-bert_data_path ${BERT_DATA_PATH} \
 	-log_file ../logs/val_abs_bert_cnndm \
-	-model_path ${MODEL_PATH} \
+	-test_from ${MODEL_PATH}model_step_68000.pt \
 	-sep_optim true \
 	-use_interval true \
 	-visible_gpus 2 \
