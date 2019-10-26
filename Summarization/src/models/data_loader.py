@@ -97,7 +97,7 @@ def load_dataset(args, corpus_type, shuffle):
     Returns:
         A list of dataset, the dataset(s) are lazily loaded.
     """
-    assert corpus_type in ["train", "valid", "test"]
+    assert corpus_type in ["train", "dev", "test"]
 
     def _lazy_dataset_loader(pt_file, corpus_type):
         dataset = torch.load(pt_file)

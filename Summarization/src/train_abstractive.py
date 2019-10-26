@@ -182,7 +182,7 @@ def validate(args, device_id, pt, step):
     model = AbsSummarizer(args, device, checkpoint)
     model.eval()
 
-    valid_iter = data_loader.Dataloader(args, load_dataset(args, 'valid', shuffle=False),
+    valid_iter = data_loader.Dataloader(args, load_dataset(args, 'dev', shuffle=False),
                                         args.batch_size, device,
                                         shuffle=False, is_test=False)
 

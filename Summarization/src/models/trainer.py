@@ -191,13 +191,16 @@ class Trainer(object):
                 tgt = batch.tgt
                 segs = batch.segs
                 clss = batch.clss
+                alignment = batch.alignment
+
                 mask_src = batch.mask_src
                 mask_tgt = batch.mask_tgt
                 mask_cls = batch.mask_cls
+                mask_alg = batch.mask_alg
 
-                outputs, _ = self.model(src, tgt, segs, clss, mask_src, mask_tgt, mask_cls)
+                outputs, _, src_mem_bank = self.model(src, tgt, segs, clss, mask_src, mask_tgt, mask_cls)
 
-                batch_stats = self.loss.monolithic_compute_loss(batch, outputs)
+                batch_stats = self.loss.monolithic_compute_loss(batch, outputs, src_mem_bank, alignment, mask_alg, mask_tgt)
                 stats.update(batch_stats)
             self._report_step(0, step, valid_stats=stats)
             return stats
