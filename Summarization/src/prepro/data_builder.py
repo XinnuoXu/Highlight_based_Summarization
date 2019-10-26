@@ -335,7 +335,15 @@ class BertData():
 
         tgt_subtoken_idxs = self.tokenizer.convert_tokens_to_ids(tgt_subtoken)
 
-        tgt_txt = '<q>'.join([' '.join(tt) for tt in tgt])
+
+        '''
+        temp codes start
+        '''
+        tgt_txt = ' '.join(tgt)
+        '''
+        temp codes end
+        '''
+        #tgt_txt = '<q>'.join([' '.join(tt) for tt in tgt])
         src_txt = [original_src_txt[i] for i in idxs]
 
         return src_subtoken_idxs, sent_labels, tgt_subtoken_idxs, segments_ids, cls_ids, src_txt, tgt_txt, alignment
