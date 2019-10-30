@@ -126,7 +126,7 @@ def _one_file(label):
         summs.append(flist[-1])
 
     file_name = "/scratch/xxu/highlights/xsum_" + label + ".jsonl"
-    fpout_dir = "tmp_output.thres/" + label + ".jsonl"
+    fpout_dir = "/scratch/xxu/highlights/for_alignment/" + label + ".jsonl"
     fpout = open(fpout_dir, "w")
 
     for i, line in enumerate(open(file_name)):
@@ -157,6 +157,45 @@ def _one_file(label):
 
     fpout.close()
 
+def g2g_token_replace(tokens):
+    at_at_num = 0
+    quote_num = 0
+    for i in range(len(tokens)):
+        if tokens[i] == "@@":
+            at_at_num += 1
+            if at_at_num % 2 == 1:
+                tokens[i] = "-lrb-"
+            else:
+                tokens[i] = "-rrb-"
+        elif tokens[i] == "£":
+            tokens[i] = "#"
+        elif tokens[i] == "\"":
+            quote_num += 1
+            if quote_num % 2 == 1:
+                tokens[i] = "``"
+            else:
+                tokens[i] = "\'\'"
+    return tokens
+
+def preprocess(file_dir):
+    objs = []
+    for line in open(file_dir):
+        json_obj = json.loads(line.strip())
+        article_lst = json_obj['article_lst']
+        decoded_lst = json_obj['decoded_lst']
+        abstract_str = json_obj['abstract_str']
+        attn_dists = json_obj['attn_dists']
+        p_gens = json_obj['p_gens']
+        src = [g2g_token_replace(sen) for sen in article_lst]
+        tgt = g2g_token_replace(decoded_lst)
+
+        obj = {}
+        obj['src'] = src
+        obj['tgt'] = tgt
+        obj['alignment'] = attn_dists
+        objs.append(obj)
+    return objs
+
 if __name__ == '__main__':
     if sys.argv[1] == "onefile":
         _one_file(sys.argv[2])
@@ -164,3 +203,20 @@ if __name__ == '__main__':
         for filename in os.listdir("/scratch/xxu/highlights/"):
             label = filename.replace("xsum_", "").replace(".jsonl", "")
             os.system("nohup python highlight_alignment.py onefile " + label + " &")
+    if sys.argv[1] == "merge":
+        datasets = {}
+        for filename in os.listdir("/scratch/xxu/highlights/for_alignment/"):
+            flist = filename.split(".")[0].split("_")
+            if len(flist) == 2:
+                continue
+            tag = flist[0]
+            if tag not in datasets:
+                datasets[tag] = []
+            file_dir = "/scratch/xxu/highlights/for_alignment/" + filename
+            data_list = preprocess(file_dir)
+            datasets[tag].extend(data_list)
+        for tag in datasets:
+            fpout = open("/scratch/xxu/highlights/s2s_alignment/xsum_" + tag + "_src.jsonl", "w")
+            for obj in datasets[tag]:
+                fpout.write(json.dumps(obj) + "\n")
+            fpout.close()
