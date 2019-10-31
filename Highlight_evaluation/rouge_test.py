@@ -249,8 +249,18 @@ if __name__ == '__main__':
         elif  sys.argv[2] == "Ref":
             hyp_dir = '../HROUGE_data/summaries/ref_gold/'
         get_hardy_rouge(ref_dir, hyp_dir)
-    elif sys.argv[1] == "Hardy_hrouge":
+    elif sys.argv[1] == "Hardy_hrouge_bert":
         ref_dir = "./Bert_token_weight/"
+        ref_tokens, ref_token_weights = get_token_weight(ref_dir)
+        if sys.argv[2] == "TConv":
+            hyp_dir = '../HROUGE_data/summaries/system_tconvs2s/'
+        elif sys.argv[2] == "PT":
+            hyp_dir = '../HROUGE_data/summaries/system_ptgen/'
+        elif  sys.argv[2] == "Ref":
+            hyp_dir = '../HROUGE_data/summaries/ref_gold/'
+        get_hardy_hrouge(ref_tokens, ref_token_weights, hyp_dir)
+    elif sys.argv[1] == "Hardy_hrouge_glove":
+        ref_dir = "./GloVE_token_weight/"
         ref_tokens, ref_token_weights = get_token_weight(ref_dir)
         if sys.argv[2] == "TConv":
             hyp_dir = '../HROUGE_data/summaries/system_tconvs2s/'
