@@ -9,6 +9,7 @@ import numpy as np
 from scipy.spatial.distance import cosine
 import torch
 from transformers import *
+import multiprocessing
 
 THRESHOLD_FACT = 0.83
 THRESHOLD_PHRASE = 0.8
@@ -343,22 +344,21 @@ class DocSumPair:
         return new_tok, new_emb
 
     def get_emb(self, emb):
-        emb = emb.cpu().numpy()
         sum_emb = emb[:len(self.sum_tok), :]
         ctx_emb = emb[len(self.sum_tok):len(self.for_bert), :]
         self.recovered_sum_terms, self.sum_embs = self.merge_tokens(self.trunc_sum_tok, self.trunc_sum_terms, sum_emb)
         self.recovered_ctx_terms, self.ctx_embs = self.merge_tokens(self.trunc_ctx_tok, self.trunc_ctx_terms, ctx_emb)
 
 class DataSet:
-    def __init__(self, src_path, tgt_path, fpout_path):
+    def __init__(self, src_path, tgt_path, label, thred_num):
+        self.label = label
+        self.thred_num = thred_num
         self.model_class = BertModel
         self.tokenizer_class = BertTokenizer
         self.pretrained_weights = 'bert-base-uncased'
         self.tokenizer = self.tokenizer_class.from_pretrained(self.pretrained_weights)
         self.model = self.model_class.from_pretrained(self.pretrained_weights).to('cuda')
 
-        #self.src_path = '../../fact_data/g2g/xsum_' + label + '_src.jsonl'
-        #self.tgt_path = '../../fact_data/g2g/xsum_' + label + '_tgt.jsonl'
         self.src_path = src_path
         self.tgt_path = tgt_path
         self.in_src = [line.strip().encode("ascii", "ignore").decode("ascii", "ignore") for line in open(self.src_path)]
@@ -366,8 +366,12 @@ class DataSet:
 
         self.stop_words = [term.strip() for term in open("./stop_words.txt")]
 
-        self.fpout = open(fpout_path, 'w')
-
+        self.fpout_path_base = '/scratch/xxu/highlights.bert/xsum_' + label + "_"
+        self.fpout_list = []
+        for i in range(thred_num):
+            fpout = open(self.fpout_path_base + str(i) + ".jsonl", 'w')
+            self.fpout_list.append(fpout)
+            
     def clean(self, line):
         flist = [item for item in line.strip().split(" ") if len(item) > 0]
         new_tok = []; new_type = []
@@ -422,9 +426,58 @@ class DataSet:
                 json_str = highlight_score(ex, self.stop_words)
                 self.fpout.write(json_str + "\n")
 
+    def multiprocessing_func(self, ex_list, last_hidden_states_list, fpout):
+        for i, ex in enumerate(ex_list):
+            last_hidden_states = last_hidden_states_list[i]
+            ex.get_emb(last_hidden_states)
+            json_str = highlight_score(ex, self.stop_words)
+            fpout.write(json_str + "\n")
+
+    def preprocess_mult(self):
+        tmp_examples = []
+        for i, src in enumerate(self.in_src):
+            src_list = []
+            for item in src.split("\t"):
+                clean_item = self.clean(item)
+                if clean_item != "":
+                    src_list.append(clean_item)
+            tgt = self.clean(self.in_tgt[i])
+            tmp_examples.append(DocSumPair(src_list, tgt, self.tokenizer))
+            if (i+1)%BATCH_SIZE == 0:
+                batch_id = self.pad(tmp_examples)
+                batch_id = torch.tensor(batch_id).to('cuda')
+                with torch.no_grad():
+                    last_hidden_states = self.model(batch_id)[0].cpu().numpy()
+                # multi threads
+                multi_ex = [[] for i in range(self.thred_num)]
+                multi_hidden = [[] for i in range(self.thred_num)]
+                for j, ex in enumerate(tmp_examples):
+                    idx = j % self.thred_num
+                    multi_ex[idx].append(ex)
+                    multi_hidden[idx].append(last_hidden_states[j])
+                processes = []
+                for j in range(len(multi_ex)):
+                    p = multiprocessing.Process(target=self.multiprocessing_func, \
+                            args=(multi_ex[j], multi_hidden[j], self.fpout_list[j]))
+                    processes.append(p)
+                    p.start()
+                for process in processes:
+                    process.join()
+                del tmp_examples[:]
+        if len(tmp_examples) > 0:
+            batch_id = self.pad(tmp_examples)
+            batch_id = torch.tensor(batch_id).to('cuda')
+            with torch.no_grad():
+                last_hidden_states = self.model(batch_id)[0]
+            for i, ex in enumerate(tmp_examples):
+                ex.get_emb(last_hidden_states[i])
+                json_str = highlight_score(ex, self.stop_words)
+                self.fpout.write(json_str + "\n")
+
 if __name__ == '__main__':
-    src_path = "./tmp_data/corpus_g2g_" + sys.argv[1] + "_src_.txt"
-    tgt_path = "./tmp_data/corpus_g2g_" + sys.argv[1] + "_tgt_.txt"
-    fpout_path = '/scratch/xxu/highlights.bert/xsum_' + sys.argv[1] + '.jsonl'
-    dataset = DataSet(src_path, tgt_path, fpout_path)
-    dataset.preprocess()
+    label = sys.argv[1]
+    thred_num = 4
+    src_path = "./tmp_data/corpus_g2g_" + label + "_src_.txt"
+    tgt_path = "./tmp_data/corpus_g2g_" + label + "_tgt_.txt"
+    dataset = DataSet(src_path, tgt_path, label, thred_num)
+    dataset.preprocess_mult()
