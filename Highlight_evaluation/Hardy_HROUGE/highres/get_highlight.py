@@ -3,6 +3,7 @@
 Extract results from database and then perform analysis on top of to draw insights
 """
 import json
+import math
 import os
 from nltk.util import ngrams
 from nltk.stem.porter import *
@@ -169,78 +170,17 @@ def numH(w, H):
             result += len(h_words) / MAX_LEN
     return result
 
-
-def beta(n, g, w, H):
-    numerator = 0
-    denominator = 0
-    m = len(w[0])
+def beta(n, D, H):
+    m = len(D[0])
+    score_list = []
     for i in range(m-n+1):
-        total_NumH = 0
         for j in range(i, i+n):
-            if w[0][i:i+n] == list(g):
-                total_NumH += numH(w[1][j], H)
-        total_NumH /= 10
-        total_NumH /= n
-        numerator += total_NumH
-    for i in range(m-n+1):
-        if w[0][i:i+n] == list(g):
-            denominator += 1
-    if denominator == 0 or numerator == 0:
-        return 0
-    return numerator/denominator
-
-
-def R_rec(n, S, D, H):
-    n_gram_D = list(ngrams(D[0], n))
-    count_n_gram_D = Counter(n_gram_D)
-    n_gram_S = list(ngrams(S, n))
-    count_n_gram_S = Counter(n_gram_S)
-
-    n_gram_DnS = set(n_gram_S).intersection(set(n_gram_D))
-    numerator = 0
-    for g in n_gram_DnS:
-        if H is not None:
-            numerator += beta(n, g, D, H) * min(count_n_gram_D[g], count_n_gram_S[g])
-        else:
-            numerator += 1 * min(count_n_gram_D[g], count_n_gram_S[g])
-    denominator = 0
-    for g in set(n_gram_D):
-        if H is not None:
-            denominator += beta(n, g, D, H) * count_n_gram_D[g]
-        else:
-            denominator += 1 * count_n_gram_D[g]
-    return numerator/max(denominator, 1)
-
-
-def R_prec(n, S, D, H):
-    n_gram_D = list(ngrams(D[0], n))
-    count_n_gram_D = Counter(n_gram_D)
-    n_gram_S = list(ngrams(S, n))
-    count_n_gram_S = Counter(n_gram_S)
-    n_gram_DnS = set(n_gram_S).intersection(set(n_gram_D))
-    numerator = 0
-    for g in n_gram_DnS:
-        if H is not None:
-            numerator += beta(n, g, D, H) * min(count_n_gram_D[g], count_n_gram_S[g])
-        else:
-            numerator += 1 * min(count_n_gram_D[g], count_n_gram_S[g])
-    denominator = 0
-    for g in set(n_gram_S):
-        # denominator += beta(n, g, D, H) * count_n_gram_S[g]
-        denominator += 1 * count_n_gram_S[g]
-    return numerator/max(denominator, 1)
-
+            total_NumH = numH(D[1][j], H) / (10 * n)
+            score_list.append(total_NumH)
+    return score_list
 
 df_h_g = df_h.groupby('doc_id')
-recs_1 = []
-recs_2 = []
-precs_1 = []
-precs_2 = []
-f_1s_1 = []
-f_1s_2 = []
-doc_ids = []
 for doc_id, data in df_annotations.groupby('doc_id'):
-    print(doc_id)
     summ = db.session.query(Summary, SummaryGroup, Document) \
         .join(Document).join(SummaryGroup) \
         .filter(
@@ -249,46 +189,8 @@ for doc_id, data in df_annotations.groupby('doc_id'):
         Document.doc_id == doc_id) \
         .first()[0]
     doc_texts = (list(df_doc.loc[doc_id]['doc_text']), list(df_doc.loc[doc_id]['doc_idxs']))
-    debug_obj = {}
-    debug_obj['doc_id'] = doc_id
-    debug_obj['document'] = " ".join(doc_texts[0])
-    debug_obj['summary'] = summ.text
-    #print (json.dumps(debug_obj))
     H = df_h_g.get_group(doc_id)
-    import math
-    print('Calculating 1-gram')
-    r_1 = R_rec(1, summ.text.split(), doc_texts, H)
-    p_1 = R_prec(1, summ.text.split(), doc_texts, H)
-    if r_1 + p_1 == 0:
-        f_1_1 = 0
-    else:
-        f_1_1 = 2 * r_1 * p_1 / (r_1 + p_1)
-    print('Calculating 2-gram')
-    r_2 = R_rec(2, summ.text.split(), doc_texts, H)
-    p_2 = R_prec(2, summ.text.split(), doc_texts, H)
-    if r_2 + p_2 == 0:
-        f_1_2 = 0
-    else:
-        f_1_2 = 2 * r_2 * p_2 / (r_2 + p_2)
-    recs_1.append(r_1)
-    recs_2.append(r_2)
-    precs_1.append(p_1)
-    precs_2.append(p_2)
-    f_1s_1.append(f_1_1)
-    f_1s_2.append(f_1_2)
-    doc_ids.append(doc_id)
-df_f_1 = pd.DataFrame({
-    'doc_id': pd.Series(doc_ids),
-    'recalls_1': pd.Series(recs_1),
-    'precisions_1': pd.Series(precs_1),
-    'f_1s_1': pd.Series(f_1s_1),
-    'recalls_2': pd.Series(recs_2),
-    'precisions_2': pd.Series(precs_2),
-    'f_1s_2': pd.Series(f_1s_2)
-})
-
-#%%
-# Save to file
-df_f_1.to_csv(os.path.join(results_dir, '%s_rouge.csv' % summary_name))
-df_f_1.describe().to_csv(os.path.join(results_dir, '%s_rouge_describe.csv' % summary_name))
-
+    uni_gram_scores = beta(1, doc_texts, H)
+    bi_gram_scores = beta(2, doc_texts, H)
+    tri_gram_scores = beta(3, doc_texts, H)
+    qua_gram_scores = beta(4, doc_texts, H)
