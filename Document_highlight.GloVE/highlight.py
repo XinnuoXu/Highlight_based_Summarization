@@ -259,7 +259,42 @@ def doc_summary_classifier(p_gens, summary, summary_emb):
 def only_tokens(tokens):
     return [tok for tok in tokens if label_classify(tok) in ['token']]
 
-def highlight_score(label):
+class GloVE_Highlight:
+    def __init__(self):
+        dir_path = os.path.dirname(os.path.realpath(__file__))
+        self.stop_words = [term.strip() for term in open(dir_path + "/stop_words.txt")]
+        self.glove_model = Glove.load(dir_path + '/glove.model')
+
+    def highlight_score(self, src_path, tgt_path, fpout_path):
+        fpout = open(fpout_path, 'w')
+
+        with open(src_path, 'r') as file:
+            doc = file.read().strip()
+        context, _, _ = flatten_vec([item.split() for item in doc.split("\t")])
+        with open(tgt_path, 'r') as file:
+            summary = file.read().strip()
+        summary = summary.split()
+
+        context_emb, context_emb_weight, context_tokens = glove_one_sentence(context, self.stop_words, self.glove_model)
+        summary_emb, summary_emb_weight, summary_tokens = glove_one_sentence(summary, self.stop_words, self.glove_model)
+        attn_dists, p_gens = get_attn_dists(context_emb, \
+                summary_emb, \
+                context_emb_weight, \
+                summary_emb_weight, \
+                context, \
+                summary, \
+                context_tokens, summary_tokens)
+        class_type = doc_summary_classifier(p_gens, summary, summary_emb)
+        json_obj = {}
+        json_obj["article_lst"] = context
+        json_obj["decoded_lst"] = summary
+        json_obj["abstract_str"] = class_type
+        json_obj["attn_dists"] = [item.tolist() for item in attn_dists]
+        json_obj["p_gens"] = p_gens
+        fpout.write(json.dumps(json_obj) + "\n")
+        fpout.close()
+
+def _highlight_score(label):
     stop_words = [term.strip() for term in open("stop_words.txt")]
     glove_model = Glove.load('glove.model')
     fpout = open('/scratch/xxu/highlights/xsum_' + label + '.jsonl', 'w')
@@ -303,6 +338,6 @@ if __name__ == '__main__':
     if sys.argv[1] == 'split':
         split_data(sys.argv[2])
     if sys.argv[1] == 'highlight_score':
-        highlight_score(sys.argv[2])
+        _highlight_score(sys.argv[2])
     if sys.argv[1] == 'highlight_score_split':
         highlight_score_split(sys.argv[2])

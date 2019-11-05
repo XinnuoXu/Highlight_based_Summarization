@@ -14,7 +14,7 @@ import multiprocessing
 THRESHOLD_FACT = 0.83
 THRESHOLD_PHRASE = 0.8
 THRESHOLD_TOKEN = 0.85
-BATCH_SIZE = 10
+BATCH_SIZE = 64
 TRUNC_SIZE = 512
 
 def label_classify(item):
@@ -468,15 +468,26 @@ class DataSet:
             batch_id = self.pad(tmp_examples)
             batch_id = torch.tensor(batch_id).to('cuda')
             with torch.no_grad():
-                last_hidden_states = self.model(batch_id)[0]
-            for i, ex in enumerate(tmp_examples):
-                ex.get_emb(last_hidden_states[i])
-                json_str = highlight_score(ex, self.stop_words)
-                self.fpout.write(json_str + "\n")
+                last_hidden_states = self.model(batch_id)[0].cpu().numpy()
+            # multi threads
+            multi_ex = [[] for i in range(self.thred_num)]
+            multi_hidden = [[] for i in range(self.thred_num)]
+            for j, ex in enumerate(tmp_examples):
+                idx = j % self.thred_num
+                multi_ex[idx].append(ex)
+                multi_hidden[idx].append(last_hidden_states[j])
+            processes = []
+            for j in range(len(multi_ex)):
+                p = multiprocessing.Process(target=self.multiprocessing_func, \
+                        args=(multi_ex[j], multi_hidden[j], self.fpout_list[j]))
+                processes.append(p)
+                p.start()
+            for process in processes:
+                process.join()
 
 if __name__ == '__main__':
     label = sys.argv[1]
-    thred_num = 4
+    thred_num = 32
     src_path = "./tmp_data/corpus_g2g_" + label + "_src_.txt"
     tgt_path = "./tmp_data/corpus_g2g_" + label + "_tgt_.txt"
     dataset = DataSet(src_path, tgt_path, label, thred_num)

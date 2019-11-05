@@ -173,13 +173,23 @@ def numH(w, H):
 def beta(n, D, H):
     m = len(D[0])
     score_list = []
+    phrase_list = []
+    idx_dict = {}
     for i in range(m-n+1):
+        phrase = " ".join(D[0][i:i+n])
+        if phrase not in idx_dict:
+            idx_dict[phrase] = 0
+        else:
+            idx_dict[phrase] += 1
+        phrase_list.append(str(idx_dict[phrase]) + "-" + phrase)
+        total_NumH = 0
         for j in range(i, i+n):
-            total_NumH = numH(D[1][j], H) / (10 * n)
-            score_list.append(total_NumH)
-    return score_list
+            total_NumH += numH(D[1][j], H) / (10 * n)
+        score_list.append(total_NumH)
+    return phrase_list, score_list
 
 df_h_g = df_h.groupby('doc_id')
+fpout = open("highlight.jsonl", "w")
 for doc_id, data in df_annotations.groupby('doc_id'):
     summ = db.session.query(Summary, SummaryGroup, Document) \
         .join(Document).join(SummaryGroup) \
@@ -190,7 +200,13 @@ for doc_id, data in df_annotations.groupby('doc_id'):
         .first()[0]
     doc_texts = (list(df_doc.loc[doc_id]['doc_text']), list(df_doc.loc[doc_id]['doc_idxs']))
     H = df_h_g.get_group(doc_id)
-    uni_gram_scores = beta(1, doc_texts, H)
-    bi_gram_scores = beta(2, doc_texts, H)
-    tri_gram_scores = beta(3, doc_texts, H)
-    qua_gram_scores = beta(4, doc_texts, H)
+
+    json_obj = {}
+    json_obj["doc_id"] = doc_id
+    json_obj["document"] = doc_texts[0]
+    json_obj["uni_gram"], json_obj["uni_gram_scores"] = beta(1, doc_texts, H)
+    json_obj["bi_gram"], json_obj["bi_gram_scores"] = beta(2, doc_texts, H)
+    json_obj["tri_gram"], json_obj["tri_gram_scores"] = beta(3, doc_texts, H)
+    json_obj["qua_gram"], json_obj["qua_gram_scores"] = beta(4, doc_texts, H)
+    fpout.write(json.dumps(json_obj) + "\n")
+fpout.close()

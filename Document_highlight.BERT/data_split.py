@@ -12,8 +12,8 @@ def split_data(label):
     fpout_src = open("tmp.src", "w")
     fpout_tgt = open("tmp.tgt", "w")
     for i in range(len(summaries)):
-        if i % 40663 == 0:
-            fid = str(int(i / 40663))
+        if i % 50829 == 0:
+            fid = str(int(i / 50829))
             fpout_src.close()
             fpout_tgt.close()
             fpout_src = open("tmp_data/corpus_g2g_" + label + "_" + fid + "_src_.txt", "w")
