@@ -30,7 +30,7 @@ def label_classify(item):
         return "reference"
     return "token"
 
-def bert_sentence(line, stop_words, recovered_terms, embeddings, truncate_id):
+def bert_sentence(line, stop_words, embeddings, truncate_id):
     embs = []
     tokens = []
     embs_weight = []
@@ -222,8 +222,8 @@ def doc_summary_classifier(p_gens, summary, summary_emb):
     return "rephrase"
 
 def highlight_score(ex, stop_words):
-    context_emb, context_emb_weight, context_tokens = bert_sentence(ex.ctx, stop_words, ex.recovered_ctx_terms, ex.ctx_embs, ex.trunc_ctx_id)
-    summary_emb, summary_emb_weight, summary_tokens = bert_sentence(ex.sum, stop_words, ex.recovered_sum_terms, ex.sum_embs, len(ex.sum)+1)
+    context_emb, context_emb_weight, context_tokens = bert_sentence(ex.ctx, stop_words, ex.ctx_embs, ex.trunc_ctx_id)
+    summary_emb, summary_emb_weight, summary_tokens = bert_sentence(ex.sum, stop_words, ex.sum_embs, len(ex.sum)+1)
     attn_dists, p_gens = get_attn_dists(context_emb, \
             summary_emb, \
             context_emb_weight, \
@@ -350,6 +350,18 @@ class DocSumPair:
         self.recovered_sum_terms, self.sum_embs = self.merge_tokens(self.trunc_sum_tok, self.trunc_sum_terms, sum_emb)
         self.recovered_ctx_terms, self.ctx_embs = self.merge_tokens(self.trunc_ctx_tok, self.trunc_ctx_terms, ctx_emb)
 
+    def write_out_emb(self, fpout):
+        json_obj = {}
+        json_obj["ctx"] = self.ctx
+        json_obj["sum"] = self.sum
+        json_obj["ctx_trees"] = self.ctx_trees
+        json_obj["sum_tree"] = self.sum_tree
+        json_obj["ctx_embs"] = [item.tolist() for item in self.ctx_embs]
+        json_obj["sum_embs"] = [item.tolist() for item in self.sum_embs]
+        json_obj["trunc_ctx_id"] = self.trunc_ctx_id
+        json_obj["trunc_sum_id"] = len(self.sum)+1
+        fpout.write(json.dumps(json_obj) + "\n")
+
 class DataSet:
     def __init__(self, src_path, tgt_path, label, thred_num):
         self.label = label
@@ -359,6 +371,7 @@ class DataSet:
         self.pretrained_weights = 'bert-base-uncased'
         self.tokenizer = self.tokenizer_class.from_pretrained(self.pretrained_weights)
         self.model = self.model_class.from_pretrained(self.pretrained_weights).to('cuda')
+        self.pool = multiprocessing.Pool(processes=self.thred_num)
 
         self.src_path = src_path
         self.tgt_path = tgt_path
@@ -370,6 +383,8 @@ class DataSet:
         self.fpout_path_base = './highlights.bert/xsum_' + label + ".jsonl"
         self.fpout = open(self.fpout_path_base, "w")
             
+        self.fpout_emb = open('./highlights.bert/xsum_' + label + ".emb", "w")
+
     def clean(self, line):
         flist = [item for item in line.strip().split(" ") if len(item) > 0]
         new_tok = []; new_type = []
@@ -444,8 +459,7 @@ class DataSet:
                 exs = []
                 for j, ex in enumerate(tmp_examples):
                     exs.append((ex, last_hidden_states[j], self.stop_words))
-                pool = multiprocessing.Pool(processes=self.thred_num)
-                result_list = pool.map(multiprocessing_func, exs)
+                result_list = self.pool.map(multiprocessing_func, exs)
                 for js in result_list:
                     self.fpout.write(js + "\n")
                 del tmp_examples[:]
@@ -459,10 +473,28 @@ class DataSet:
             exs = []
             for j, ex in enumerate(tmp_examples):
                 exs.append((ex, last_hidden_states[j], self.stop_words))
-            pool = multiprocessing.Pool(processes=self.thred_num)
-            result_list = pool.map(multiprocessing_func, exs)
+            result_list = self.pool.map(multiprocessing_func, exs)
             for js in result_list:
                 self.fpout.write(js + "\n")
+
+    def get_BERT_emb(self):
+        tmp_examples = []
+        for i, src in enumerate(self.in_src):
+            src_list = []
+            for item in src.split("\t"):
+                clean_item = self.clean(item)
+                if clean_item != "":
+                    src_list.append(clean_item)
+            tgt = self.clean(self.in_tgt[i])
+            tmp_examples.append(DocSumPair(src_list, tgt, self.tokenizer))
+            if (i+1)%BATCH_SIZE == 0:
+                batch_id = self.pad(tmp_examples)
+                batch_id = torch.tensor(batch_id).to('cuda')
+                with torch.no_grad():
+                    last_hidden_states = self.model(batch_id)[0].cpu().numpy()
+                for j, ex in enumerate(tmp_examples):
+                    ex.get_emb(last_hidden_states[j])
+                    ex.write_out_emb(self.fpout_emb)
 
 def multiprocessing_func(args):
     (ex, last_hidden_states, stop_words) = args
@@ -471,9 +503,10 @@ def multiprocessing_func(args):
     return json_str
 
 if __name__ == '__main__':
-    label = sys.argv[1]
-    thred_num = 32
-    src_path = "./tmp_data/corpus_g2g_" + label + "_src_.txt"
-    tgt_path = "./tmp_data/corpus_g2g_" + label + "_tgt_.txt"
-    dataset = DataSet(src_path, tgt_path, label, thred_num)
-    dataset.preprocess_mult()
+    thred_num = 28
+    if sys.argv[1] == "emb":
+        label = sys.argv[2]
+        src_path = "./tmp_data/corpus_g2g_" + label + "_src_.txt"
+        tgt_path = "./tmp_data/corpus_g2g_" + label + "_tgt_.txt"
+        dataset = DataSet(src_path, tgt_path, label, thred_num)
+        dataset.get_BERT_emb()

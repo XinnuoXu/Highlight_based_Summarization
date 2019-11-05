@@ -198,57 +198,7 @@ def preprocess(file_dir):
         objs.append(obj)
     return objs
 
-def clean(line):
-    flist = [item for item in line.strip().split(" ") if len(item) > 0]
-    new_tok = []; new_type = []
-    for item in flist:
-        l_type = label_classify(item)
-        if l_type == "end" and new_type[-1] in ["fact", "phrase"]:
-            new_tok.pop(); new_type.pop()
-            continue
-        else:
-            new_tok.append(item)
-            new_type.append(l_type)
-    return " ".join(new_tok)
-
-def multiprocessing_func(multi_ex, fpout):
-    print ("multiprocessing_func", len(multi_ex))
-    for sent in multi_ex:
-        fpout.write(sent + "\n")
-
-def _pro_split(in_src, in_tgt, fpout_path_base, thred_num, batch_size):
-    fpout_list = []
-    for i in range(thred_num):
-        fpout = open(fpout_path_base + str(i) + ".jsonl", 'w')
-        fpout_list.append(fpout)
-    multi_ex = [[] for i in range(thred_num)]
-    for i, src in enumerate(in_src):
-        src_list = []
-        for item in src.split("\t"):
-            clean_item = clean(item)
-            if clean_item != "":
-                src_list.append(clean_item)
-        tgt = clean(in_tgt[i])
-        line = "\t".join(src_list) + "\t" + tgt
-        multi_ex[i % thred_num].append(line)
-
-    processes = []
-    for j, ex in enumerate(multi_ex):
-        p = multiprocessing.Process(target=multiprocessing_func, args=(ex, fpout_list[j]))
-        processes.append(p)
-        p.start()
-    for process in processes:
-        process.join()
-
 if __name__ == '__main__':
-    if sys.argv[1] == "pro_split":
-        # bad code
-        src_path = "./tmp_data/corpus_g2g_" + sys.argv[2] + "_src_.txt"
-        tgt_path = "./tmp_data/corpus_g2g_" + sys.argv[2] + "_tgt_.txt"
-        fpout_path_base = "/scratch/xxu/highlights.bert/tmp_data/xsum_" + sys.argv[2] + "_"
-        in_src = [line.strip() for line in open(src_path)]
-        in_tgt = [line.strip() for line in open(tgt_path)]
-        _pro_split(in_src, in_tgt, fpout_path_base, 32, 64)
     if sys.argv[1] == "onefile":
         _one_file(sys.argv[2])
     if sys.argv[1] == "multi_thread":
