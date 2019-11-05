@@ -119,16 +119,8 @@ def _split_doc(article_lst, attn_dists, split_info):
     return cut_attn_dists[-1], cut_attn_dists[:-1]
 
 def _one_file(label):
-    sen_split_path = "./tmp_data/" + "corpus_g2g_" + label + ".txt"
-    docs = []; summs = []
-    for line in open(sen_split_path):
-        flist = line.strip().split("\t")
-        doc = flist[:-1]
-        docs.append([_rephrase(sen.split(' ')) for sen in doc])
-        summs.append(flist[-1])
-
-    file_name = "/scratch/xxu/highlights/xsum_" + label + ".jsonl"
-    fpout_dir = "/scratch/xxu/highlights/for_alignment/" + label + ".jsonl"
+    file_name = "./highlights.bert/xsum_" + label + ".jsonl"
+    fpout_dir = "./highlights.bert/for_alignment/" + label + ".jsonl"
     fpout = open(fpout_dir, "w")
 
     for i, line in enumerate(open(file_name)):
@@ -138,10 +130,12 @@ def _one_file(label):
         abstract_str = json_obj['abstract_str']
         attn_dists = json_obj['attn_dists']
         p_gens = json_obj['p_gens']
+        doc = json_obj['ctx_trees']
+        doc = [_rephrase(sen.split(' ')) for sen in doc]
 
         p_gens = _re_score(decoded_lst, p_gens)
         article_lst, decoded_lst, attn_dists = _alignment(article_lst, decoded_lst, attn_dists, p_gens)
-        article_lst, attn_dists = _split_doc(article_lst, attn_dists, docs[i])
+        article_lst, attn_dists = _split_doc(article_lst, attn_dists, doc)
 
         json_obj = {}
         json_obj["article_lst"] = article_lst
