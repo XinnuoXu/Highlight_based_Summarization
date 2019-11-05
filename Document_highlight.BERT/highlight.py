@@ -238,6 +238,8 @@ def highlight_score(ex, stop_words):
     json_obj["abstract_str"] = class_type
     json_obj["attn_dists"] = [item.tolist() for item in attn_dists]
     json_obj["p_gens"] = p_gens
+    json_obj["ctx_trees"] = ex.ctx_trees
+    json_obj["sum_tree"] = ex.sum_tree
     return json.dumps(json_obj)
 
 class DocSumPair:
@@ -475,7 +477,8 @@ class DataSet:
                 exs.append((ex, last_hidden_states[j], self.stop_words))
             result_list = self.pool.map(multiprocessing_func, exs)
             for js in result_list:
-                self.fpout.write(js + "\n")
+                if js != "":
+                    self.fpout.write(js + "\n")
 
     def get_BERT_emb(self):
         tmp_examples = []
@@ -498,15 +501,17 @@ class DataSet:
 
 def multiprocessing_func(args):
     (ex, last_hidden_states, stop_words) = args
-    ex.get_emb(last_hidden_states)
-    json_str = highlight_score(ex, stop_words)
+    try:
+        ex.get_emb(last_hidden_states)
+        json_str = highlight_score(ex, stop_words)
+    except:
+        return ""
     return json_str
 
 if __name__ == '__main__':
-    thred_num = 28
-    if sys.argv[1] == "emb":
-        label = sys.argv[2]
-        src_path = "./tmp_data/corpus_g2g_" + label + "_src_.txt"
-        tgt_path = "./tmp_data/corpus_g2g_" + label + "_tgt_.txt"
-        dataset = DataSet(src_path, tgt_path, label, thred_num)
-        dataset.get_BERT_emb()
+    thred_num = 20
+    label = sys.argv[1]
+    src_path = "./tmp_data/corpus_g2g_" + label + "_src_.txt"
+    tgt_path = "./tmp_data/corpus_g2g_" + label + "_tgt_.txt"
+    dataset = DataSet(src_path, tgt_path, label, thred_num)
+    dataset.preprocess_mult()
