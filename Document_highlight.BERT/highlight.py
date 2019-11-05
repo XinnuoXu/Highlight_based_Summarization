@@ -385,7 +385,7 @@ class DataSet:
         self.fpout_path_base = './highlights.bert/xsum_' + label + ".jsonl"
         self.fpout = open(self.fpout_path_base, "w")
             
-        self.fpout_emb = open('./highlights.bert/xsum_' + label + ".emb", "w")
+        #self.fpout_emb = open('./highlights.bert/xsum_' + label + ".emb", "w")
 
     def clean(self, line):
         flist = [item for item in line.strip().split(" ") if len(item) > 0]
