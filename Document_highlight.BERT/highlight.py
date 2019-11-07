@@ -8,8 +8,8 @@ import copy
 import numpy as np
 from scipy.spatial.distance import cosine
 import torch
-#from transformers import *
-from pytorch_transformers import *
+from transformers import *
+#from pytorch_transformers import *
 import multiprocessing
 
 THRESHOLD_FACT = 0.83
@@ -365,7 +365,7 @@ class DocSumPair:
         fpout.write(json.dumps(json_obj) + "\n")
 
 class DataSet:
-    def __init__(self, src_path, tgt_path, label, thred_num):
+    def __init__(self, src_path, tgt_path, label, thred_num=1):
         self.label = label
         self.thred_num = thred_num
         self.model_class = BertModel

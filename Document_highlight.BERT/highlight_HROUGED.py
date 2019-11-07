@@ -19,13 +19,25 @@ def label_classify(item):
         return "reference"
     return "token"
 
-def _re_score(article_lst, sum_dists):
+def _top_n_filter(attn_dists, n):
+    if n == -1:
+        return attn_dists
+    new_list = []
+    for tok_align in attn_dists:
+        threshold = np.sort(tok_align)[-n]
+        for i in range(len(tok_align)):
+            if tok_align[i] < threshold:
+                tok_align[i] = 0.0
+        new_list.append(tok_align)
+    return attn_dists 
+
+def _re_score(article_lst, summ_dists):
     tokens = []; scores = []
     type_stack = []
     label_score_stack = []
     fact_score_stack = []
     for i, token in enumerate(article_lst):
-        sim_score = sum_dists[i] if sum_dists[i] > 0 else 0.0
+        sim_score = summ_dists[i] if summ_dists[i] > 0 else 0.0
         token_type = label_classify(token)
         if token_type == "fact":
             type_stack.append(token_type)
@@ -49,8 +61,9 @@ def _re_score(article_lst, sum_dists):
 
 def _document(article_lst, attn_dists):
     attn_dists = np.array(attn_dists)
-    sum_dists = np.amax(attn_dists, axis=0)
-    return _re_score(article_lst, sum_dists)
+    attn_dists = _top_n_filter(attn_dists, -1)
+    summ_dists = np.amax(attn_dists, axis=0)
+    return _re_score(article_lst, summ_dists)
 
 def _summary(decoded_lst, p_gens):
     return _re_score(decoded_lst, p_gens)

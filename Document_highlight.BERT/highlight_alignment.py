@@ -20,6 +20,18 @@ def label_classify(item):
         return "reference"
     return "token"
 
+def _top_n_filter(attn_dists, n):
+    if n == -1:
+        return attn_dists
+    new_list = []
+    for tok_align in attn_dists:
+        threshold = np.sort(tok_align)[-n]
+        for i in range(len(tok_align)):
+            if tok_align[i] < threshold:
+                tok_align[i] = 0.0
+        new_list.append(tok_align)
+    return attn_dists 
+
 def _re_score(article_lst, sum_dists):
     scores = []
     type_stack = []
@@ -90,8 +102,9 @@ def _rephrase(article_lst):
             tokens.append(token)
     return tokens
 
-def _alignment(article_lst, decoded_lst, attn_dists, p_gens):
+def _alignment(article_lst, decoded_lst, attn_dists, p_gens, n=5):
     attn_dists = np.array(attn_dists)
+    attn_dists = _top_n_filter(attn_dists, n)
     sum_dists = np.amax(attn_dists, axis=0)
     decoded_lst, scores = _merge_weight(decoded_lst, attn_dists)
     scores.insert(0, sum_dists)
@@ -134,7 +147,7 @@ def _one_file(label):
         doc = [_rephrase(sen.split(' ')) for sen in doc]
 
         p_gens = _re_score(decoded_lst, p_gens)
-        article_lst, decoded_lst, attn_dists = _alignment(article_lst, decoded_lst, attn_dists, p_gens)
+        article_lst, decoded_lst, attn_dists = _alignment(article_lst, decoded_lst, attn_dists, p_gens, n=5)
         article_lst, attn_dists = _split_doc(article_lst, attn_dists, doc)
 
         json_obj = {}
