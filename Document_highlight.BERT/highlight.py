@@ -8,8 +8,8 @@ import copy
 import numpy as np
 from scipy.spatial.distance import cosine
 import torch
-from transformers import *
-#from pytorch_transformers import *
+#from transformers import *
+from pytorch_transformers import *
 import multiprocessing
 
 THRESHOLD_FACT = 0.83
@@ -365,8 +365,7 @@ class DocSumPair:
         fpout.write(json.dumps(json_obj) + "\n")
 
 class DataSet:
-    def __init__(self, src_path, tgt_path, label, thred_num=1):
-        self.label = label
+    def __init__(self, src_path, tgt_path, fpout_path, thred_num=1):
         self.thred_num = thred_num
         self.model_class = BertModel
         self.tokenizer_class = BertTokenizer
@@ -382,10 +381,7 @@ class DataSet:
 
         self.stop_words = [term.strip() for term in open("./stop_words.txt")]
 
-        self.fpout_path_base = './highlights.bert/xsum_' + label + ".jsonl"
-        self.fpout = open(self.fpout_path_base, "w")
-            
-        #self.fpout_emb = open('./highlights.bert/xsum_' + label + ".emb", "w")
+        self.fpout = open(fpout_path, "w")
 
     def clean(self, line):
         flist = [item for item in line.strip().split(" ") if len(item) > 0]
@@ -509,9 +505,29 @@ def multiprocessing_func(args):
     return json_str
 
 if __name__ == '__main__':
-    thred_num = 20
-    label = sys.argv[1]
-    src_path = "./tmp_data/corpus_g2g_" + label + "_src_.txt"
-    tgt_path = "./tmp_data/corpus_g2g_" + label + "_tgt_.txt"
-    dataset = DataSet(src_path, tgt_path, label, thred_num)
-    dataset.preprocess_mult()
+    if sys.argv[1] == "data":
+        thred_num = 20
+        label = sys.argv[2]
+        src_path = "./tmp_data/corpus_g2g_" + label + "_src_.txt"
+        tgt_path = "./tmp_data/corpus_g2g_" + label + "_tgt_.txt"
+        fpout_path = './highlights.bert/xsum_' + label + ".jsonl"
+        dataset = DataSet(src_path, tgt_path, fpout_path, label, thred_num)
+        dataset.preprocess_mult()
+    if sys.argv[1] == "test":
+        thred_num = 1
+        src_path = "./test_data/test_src.txt"
+        tgt_path = "./test_data/test_tgt.txt"
+        srcs = [line.strip() for line in open(src_path)]
+        tgts = [line.strip() for line in open(tgt_path)]
+        for i, src in enumerate(srcs):
+            fpout_tmp = open("test_data/tmp.src", "w")
+            fpout_tmp.write(src + "\n")
+            fpout_tmp.close()
+            fpout_tmp = open("test_data/tmp.tgt", "w")
+            fpout_tmp.write(tgts[i] + "\n")
+            fpout_tmp.close()
+            src_path = "test_data/tmp.src"
+            tgt_path = "test_data/tmp.tgt"
+            fpout_path = './test_data/' + str(i) + ".jsonl"
+            dataset = DataSet(src_path, tgt_path, fpout_path, thred_num)
+            dataset.preprocess_mult()

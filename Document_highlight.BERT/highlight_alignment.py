@@ -25,7 +25,8 @@ def _top_n_filter(attn_dists, n):
         return attn_dists
     new_list = []
     for tok_align in attn_dists:
-        threshold = np.sort(tok_align)[-n]
+        top_n = min(n, len(tok_align))
+        threshold = np.sort(tok_align)[-top_n]
         for i in range(len(tok_align)):
             if tok_align[i] < threshold:
                 tok_align[i] = 0.0
@@ -102,16 +103,23 @@ def _rephrase(article_lst):
             tokens.append(token)
     return tokens
 
-def _alignment(article_lst, decoded_lst, attn_dists, p_gens, n=5):
+def _alignment(article_lst, decoded_lst, attn_dists, p_gens, n=20):
     attn_dists = np.array(attn_dists)
-    attn_dists = _top_n_filter(attn_dists, n)
+    #attn_dists = _top_n_filter(attn_dists, n)
+    np.set_printoptions(threshold=sys.maxsize)
+
+    print (article_lst)
+    print (decoded_lst)
     sum_dists = np.amax(attn_dists, axis=0)
     decoded_lst, scores = _merge_weight(decoded_lst, attn_dists)
     scores.insert(0, sum_dists)
     decoded_lst.insert(0, "[SUMMARY]")
     p_gens.insert(0, 1.0)
+
     scores = [_re_score(article_lst, score) for score in scores]
     article_lst = _rephrase(article_lst)
+    print (scores[1])
+
     return article_lst, decoded_lst, scores
 
 def _split_doc(article_lst, attn_dists, split_info):
@@ -133,11 +141,15 @@ def _split_doc(article_lst, attn_dists, split_info):
 
 def _one_file(label):
     file_name = "./highlights.bert/xsum_" + label + ".jsonl"
+    #file_name = "./test_data/" + label + ".jsonl"
     fpout_dir = "./highlights.bert/for_alignment/" + label + ".jsonl"
     fpout = open(fpout_dir, "w")
 
     for i, line in enumerate(open(file_name)):
-        json_obj = json.loads(line.strip())
+        try:
+            json_obj = json.loads(line.strip())
+        except:
+            continue
         article_lst = json_obj['article_lst']
         decoded_lst = json_obj['decoded_lst']
         abstract_str = json_obj['abstract_str']
@@ -209,23 +221,25 @@ if __name__ == '__main__':
     if sys.argv[1] == "onefile":
         _one_file(sys.argv[2])
     if sys.argv[1] == "multi_thread":
-        for filename in os.listdir("/scratch/xxu/highlights/"):
+        for filename in os.listdir("./highlights.bert/"):
+            if not filename.endswith(".jsonl"):
+                continue
             label = filename.replace("xsum_", "").replace(".jsonl", "")
             os.system("nohup python highlight_alignment.py onefile " + label + " &")
     if sys.argv[1] == "merge":
         datasets = {}
-        for filename in os.listdir("/scratch/xxu/highlights/for_alignment/"):
+        for filename in os.listdir("./highlights.bert/for_alignment/"):
             flist = filename.split(".")[0].split("_")
-            if len(flist) == 2:
+            if len(flist) != 2:
                 continue
             tag = flist[0]
             if tag not in datasets:
                 datasets[tag] = []
-            file_dir = "/scratch/xxu/highlights/for_alignment/" + filename
+            file_dir = "./highlights.bert/for_alignment/" + filename
             data_list = preprocess(file_dir)
             datasets[tag].extend(data_list)
         for tag in datasets:
-            fpout = open("/scratch/xxu/highlights/s2s_alignment/xsum_" + tag + "_src.jsonl", "w")
+            fpout = open("./highlights.bert/s2s_alignment/xsum_" + tag + "_src.jsonl", "w")
             for obj in datasets[tag]:
                 fpout.write(json.dumps(obj) + "\n")
             fpout.close()
