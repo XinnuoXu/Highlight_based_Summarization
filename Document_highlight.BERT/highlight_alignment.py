@@ -5,8 +5,9 @@ import numpy as np
 #from multiprocess import Pool
 import multiprocessing
 
-ALPHA_PH = 0.5
-ALPHA_FA = 0.5
+ALPHA_TK = 0.3
+ALPHA_PH = 0.3
+ALPHA_FA = 0.4
 
 def label_classify(item):
     if item[0] == '(':
@@ -62,7 +63,7 @@ def _re_score(article_lst, sum_dists):
                 else:
                     label_score = 0
                 fact_score = fact_score_stack[-1] if len(fact_score_stack) > 0 else 0.0
-                score = ALPHA_PH * label_score + ALPHA_FA * fact_score
+                score = ALPHA_PH * label_score + ALPHA_FA * fact_score + ALPHA_TK * sim_score
                 scores.append(score)
     return scores
 
@@ -105,11 +106,9 @@ def _rephrase(article_lst):
 
 def _alignment(article_lst, decoded_lst, attn_dists, p_gens, n=20):
     attn_dists = np.array(attn_dists)
-    #attn_dists = _top_n_filter(attn_dists, n)
+    attn_dists = _top_n_filter(attn_dists, n)
     np.set_printoptions(threshold=sys.maxsize)
 
-    print (article_lst)
-    print (decoded_lst)
     sum_dists = np.amax(attn_dists, axis=0)
     decoded_lst, scores = _merge_weight(decoded_lst, attn_dists)
     scores.insert(0, sum_dists)
@@ -118,7 +117,6 @@ def _alignment(article_lst, decoded_lst, attn_dists, p_gens, n=20):
 
     scores = [_re_score(article_lst, score) for score in scores]
     article_lst = _rephrase(article_lst)
-    print (scores[1])
 
     return article_lst, decoded_lst, scores
 

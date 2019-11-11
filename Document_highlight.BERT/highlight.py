@@ -8,8 +8,8 @@ import copy
 import numpy as np
 from scipy.spatial.distance import cosine
 import torch
-#from transformers import *
-from pytorch_transformers import *
+from transformers import *
+#from pytorch_transformers import *
 import multiprocessing
 
 THRESHOLD_FACT = 0.83

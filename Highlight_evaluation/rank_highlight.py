@@ -183,7 +183,7 @@ if __name__ == '__main__':
 
         uni_eva.one_doc(h_uni_gram, h_uni_gram_scores, uni_gram, uni_gram_scores)
         bi_eva.one_doc(h_bi_gram, h_bi_gram_scores, bi_gram, bi_gram_scores)
-        tri_eva.one_doc(h_bi_gram, h_bi_gram_scores, bi_gram, bi_gram_scores)
+        tri_eva.one_doc(h_tri_gram, h_tri_gram_scores, tri_gram, tri_gram_scores)
         qua_eva.one_doc(h_qua_gram, h_qua_gram_scores, qua_gram, qua_gram_scores)
 
     print ("Uni:")

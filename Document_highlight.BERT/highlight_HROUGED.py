@@ -4,8 +4,9 @@ import sys, json
 import numpy as np
 import random
 
-ALPHA_PH = 0.5
-ALPHA_FA = 0.5
+ALPHA_TK = 0.3
+ALPHA_PH = 0.3
+ALPHA_FA = 0.4
 
 def label_classify(item):
     if item[0] == '(':
@@ -55,13 +56,13 @@ def _re_score(article_lst, summ_dists):
             tokens.append(token)
             label_score = label_score_stack[-1] if len(label_score_stack) > 0 else 0.0
             fact_score = fact_score_stack[-1] if len(fact_score_stack) > 0 else 0.0
-            score = ALPHA_PH * label_score + ALPHA_FA * fact_score
+            score = ALPHA_PH * label_score + ALPHA_FA * fact_score + ALPHA_TK * sim_score
             scores.append(score)
     return tokens, scores
 
 def _document(article_lst, attn_dists):
     attn_dists = np.array(attn_dists)
-    attn_dists = _top_n_filter(attn_dists, -1)
+    attn_dists = _top_n_filter(attn_dists, 20)
     summ_dists = np.amax(attn_dists, axis=0)
     return _re_score(article_lst, summ_dists)
 

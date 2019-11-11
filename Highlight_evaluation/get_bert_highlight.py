@@ -3,8 +3,8 @@
 import sys
 import os
 sys.path.append(os.path.abspath('../Document_highlight.BERT/'))
-from quality_classifier import *
-from quality_classifier_HighRES import *
+from highlight import *
+from highlight_HROUGED import *
 
 if __name__ == '__main__':
     ids = []
