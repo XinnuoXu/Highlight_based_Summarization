@@ -8,9 +8,11 @@ import copy
 import numpy as np
 from scipy.spatial.distance import cosine
 import torch
-from transformers import *
-#from pytorch_transformers import *
+#from transformers import *
+from pytorch_transformers import *
 import multiprocessing
+
+CUR_DIR = os.path.dirname(os.path.realpath(__file__))
 
 THRESHOLD_FACT = 0.83
 THRESHOLD_PHRASE = 0.8
@@ -365,7 +367,7 @@ class DocSumPair:
         fpout.write(json.dumps(json_obj) + "\n")
 
 class DataSet:
-    def __init__(self, src_path, tgt_path, fpout_path, thred_num=1):
+    def __init__(self, src_path, tgt_path, fpout_path, thred_num=10):
         self.thred_num = thred_num
         self.model_class = BertModel
         self.tokenizer_class = BertTokenizer
@@ -379,7 +381,7 @@ class DataSet:
         self.in_src = [line.strip().encode("ascii", "ignore").decode("ascii", "ignore") for line in open(self.src_path)]
         self.in_tgt = [line.strip().encode("ascii", "ignore").decode("ascii", "ignore") for line in open(self.tgt_path)]
 
-        self.stop_words = [term.strip() for term in open("./stop_words.txt")]
+        self.stop_words = [term.strip() for term in open(CUR_DIR + "/stop_words.txt")]
 
         self.fpout = open(fpout_path, "w")
 

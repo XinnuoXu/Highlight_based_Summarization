@@ -58,6 +58,8 @@ def test_rouge(cand, ref,num_processes):
     """Calculate ROUGE scores of sequences passed as an iterator
        e.g. a list of str, an open file, StringIO or even sys.stdin
     """
+
+    fpout_log = open("../logs/rouge_in_details.json")
     candidates = [line.strip() for line in cand]
     references = [line.strip() for line in ref]
 
@@ -74,14 +76,21 @@ def test_rouge(cand, ref,num_processes):
     results = pool.map(process,arg_lst)
     final_results = {}
     for i,r in enumerate(results):
+        json_obj = {}
+        json_obj["cand"] = candidates_chunks[i]
+        json_obj["ref"] = references_chunks[i]
         for k in r:
+            json_obj["ngram-" + str(k)] = r[k] * len(candidates_chunks[i])
             if(k not in final_results):
                 final_results[k] = r[k]*len(candidates_chunks[i])
             else:
                 final_results[k] += r[k] * len(candidates_chunks[i])
+        fpout_log.write(json.dumps(json_obj) + "\n")
+    fpout_log.close()
     for k in final_results:
         final_results[k] = final_results[k]/len(candidates)
     return final_results
+
 def rouge_results_to_str(results_dict):
     return ">> ROUGE-F(1/2/3/l): {:.2f}/{:.2f}/{:.2f}\nROUGE-R(1/2/3/l): {:.2f}/{:.2f}/{:.2f}\n".format(
         results_dict["rouge_1_f_score"] * 100,

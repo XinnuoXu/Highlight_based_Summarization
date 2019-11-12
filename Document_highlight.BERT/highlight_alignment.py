@@ -137,10 +137,7 @@ def _split_doc(article_lst, attn_dists, split_info):
         cut_attn_dists[-1][-1].append(tok)
     return cut_attn_dists[-1], cut_attn_dists[:-1]
 
-def _one_file(label):
-    file_name = "./highlights.bert/xsum_" + label + ".jsonl"
-    #file_name = "./test_data/" + label + ".jsonl"
-    fpout_dir = "./highlights.bert/for_alignment/" + label + ".jsonl"
+def _one_file(file_name, fpout_dir):
     fpout = open(fpout_dir, "w")
 
     for i, line in enumerate(open(file_name)):
@@ -167,13 +164,6 @@ def _one_file(label):
         json_obj["attn_dists"] = attn_dists
         json_obj["p_gens"] = p_gens
         fpout.write(json.dumps(json_obj) + "\n")
-        
-        '''
-        fpout = open("tmp_output.thres/" + str(i) + ".json", "w")
-        fpout.write(json.dumps(json_obj) + "\n")
-        fpout.close()
-        '''
-
     fpout.close()
 
 def g2g_token_replace(tokens):
@@ -217,7 +207,10 @@ def preprocess(file_dir):
 
 if __name__ == '__main__':
     if sys.argv[1] == "onefile":
-        _one_file(sys.argv[2])
+        label = sys.argv[2]
+        file_name = "./highlights.bert/xsum_" + label + ".jsonl"
+        fpout_dir = "./highlights.bert/for_alignment/" + label + ".jsonl"
+        _one_file(file_name, fpout_dir)
     if sys.argv[1] == "multi_thread":
         for filename in os.listdir("./highlights.bert/"):
             if not filename.endswith(".jsonl"):
