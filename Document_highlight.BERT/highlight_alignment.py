@@ -104,7 +104,7 @@ def _rephrase(article_lst):
             tokens.append(token)
     return tokens
 
-def _alignment(article_lst, decoded_lst, attn_dists, p_gens, n=20):
+def _alignment(article_lst, decoded_lst, attn_dists, p_gens, n=-1):
     attn_dists = np.array(attn_dists)
     attn_dists = _top_n_filter(attn_dists, n)
     np.set_printoptions(threshold=sys.maxsize)
@@ -137,7 +137,7 @@ def _split_doc(article_lst, attn_dists, split_info):
         cut_attn_dists[-1][-1].append(tok)
     return cut_attn_dists[-1], cut_attn_dists[:-1]
 
-def _one_file(label):
+def _one_file(label, n=-1):
     file_name = "./highlights.bert/xsum_" + label + ".jsonl"
     #file_name = "./test_data/" + label + ".jsonl"
     fpout_dir = "./highlights.bert/for_alignment/" + label + ".jsonl"
@@ -157,7 +157,7 @@ def _one_file(label):
         doc = [_rephrase(sen.split(' ')) for sen in doc]
 
         p_gens = _re_score(decoded_lst, p_gens)
-        article_lst, decoded_lst, attn_dists = _alignment(article_lst, decoded_lst, attn_dists, p_gens, n=5)
+        article_lst, decoded_lst, attn_dists = _alignment(article_lst, decoded_lst, attn_dists, p_gens, n)
         article_lst, attn_dists = _split_doc(article_lst, attn_dists, doc)
 
         json_obj = {}
@@ -217,7 +217,8 @@ def preprocess(file_dir):
 
 if __name__ == '__main__':
     if sys.argv[1] == "onefile":
-        _one_file(sys.argv[2])
+        top_n = -1
+        _one_file(sys.argv[2], top_n)
     if sys.argv[1] == "multi_thread":
         for filename in os.listdir("./highlights.bert/"):
             if not filename.endswith(".jsonl"):
