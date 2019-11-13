@@ -7,7 +7,7 @@ from __future__ import division
 import argparse
 import os
 from others.logging import init_logger
-from train_abstractive import validate_abs, train_abs, baseline, test_abs, test_text_abs
+from train_abstractive import validate_abs, train_abs, baseline, test_abs, test_text_abs, attn_debug
 from train_extractive import train_ext, validate_ext, test_ext
 
 model_flags = ['hidden_size', 'ff_size', 'heads', 'emb_size', 'enc_layers', 'enc_hidden_size', 'enc_ff_size',
@@ -29,7 +29,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("-task", default='ext', type=str, choices=['ext', 'abs'])
     parser.add_argument("-encoder", default='bert', type=str, choices=['bert', 'baseline'])
-    parser.add_argument("-mode", default='train', type=str, choices=['train', 'validate', 'test'])
+    parser.add_argument("-mode", default='train', type=str, choices=['train', 'validate', 'test', 'attn_debug'])
     parser.add_argument("-bert_data_path", default='../bert_data_new/cnndm')
     parser.add_argument("-model_path", default='../models/')
     parser.add_argument("-result_path", default='../results/cnndm')
@@ -98,6 +98,7 @@ if __name__ == '__main__':
     parser.add_argument('-visible_gpus', default='-1', type=str)
     parser.add_argument('-gpu_ranks', default='0', type=str)
     parser.add_argument('-log_file', default='../logs/cnndm.log')
+    parser.add_argument('-log_attn_file', default='../logs/attn.log')
     parser.add_argument('-seed', default=666, type=int)
 
     parser.add_argument("-test_all", type=str2bool, nargs='?',const=True,default=False)
@@ -126,6 +127,13 @@ if __name__ == '__main__':
             baseline(args, cal_lead=True)
         elif (args.mode == 'oracle'):
             baseline(args, cal_oracle=True)
+        if (args.mode == 'attn_debug'):
+            cp = args.test_from
+            try:
+                step = int(cp.split('.')[-2].split('_')[-1])
+            except:
+                step = 0
+            attn_debug(args, device_id, cp, step)
         if (args.mode == 'test'):
             cp = args.test_from
             try:

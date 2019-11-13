@@ -7,6 +7,7 @@ from multiprocessing import Pool
 import shutil
 import sys
 import codecs
+import json
 
 # from onmt.utils.logging import init_logger, logger
 from others import pyrouge
@@ -59,12 +60,9 @@ def test_rouge(cand, ref,num_processes):
        e.g. a list of str, an open file, StringIO or even sys.stdin
     """
 
-    fpout_log = open("../logs/rouge_in_details.json")
     candidates = [line.strip() for line in cand]
     references = [line.strip() for line in ref]
 
-    print(len(candidates))
-    print(len(references))
     assert len(candidates) == len(references)
     candidates_chunks = list(chunks(candidates, int(len(candidates)/num_processes)))
     references_chunks = list(chunks(references, int(len(references)/num_processes)))
@@ -76,17 +74,11 @@ def test_rouge(cand, ref,num_processes):
     results = pool.map(process,arg_lst)
     final_results = {}
     for i,r in enumerate(results):
-        json_obj = {}
-        json_obj["cand"] = candidates_chunks[i]
-        json_obj["ref"] = references_chunks[i]
         for k in r:
-            json_obj["ngram-" + str(k)] = r[k] * len(candidates_chunks[i])
             if(k not in final_results):
                 final_results[k] = r[k]*len(candidates_chunks[i])
             else:
                 final_results[k] += r[k] * len(candidates_chunks[i])
-        fpout_log.write(json.dumps(json_obj) + "\n")
-    fpout_log.close()
     for k in final_results:
         final_results[k] = final_results[k]/len(candidates)
     return final_results
@@ -126,8 +118,9 @@ if __name__ == "__main__":
     references = codecs.open(args.r, encoding="utf-8")
 
     results_dict = test_rouge(candidates, references,args.p)
+
     # return 0
-    print(time.strftime('%H:%M:%S', time.localtime())
-)
+    print(time.strftime('%H:%M:%S', time.localtime()))
+
     print(rouge_results_to_str(results_dict))
     # logger.info(rouge_results_to_str(results_dict))

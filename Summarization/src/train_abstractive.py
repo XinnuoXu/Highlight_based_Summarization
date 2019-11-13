@@ -10,6 +10,7 @@ import os
 import random
 import signal
 import time
+import json
 
 import torch
 from pytorch_transformers import BertTokenizer
@@ -195,6 +196,38 @@ def validate(args, device_id, pt, step):
     trainer = build_trainer(args, device_id, model, None, valid_loss)
     stats = trainer.validate(valid_iter, step)
     return stats.xent()
+
+def attn_debug(args, device_id, pt, step):
+    device = "cpu" if args.visible_gpus == '-1' else "cuda"
+    if (pt != ''):
+        test_from = pt
+    else:
+        test_from = args.test_from
+    logger.info('Loading checkpoint from %s' % test_from)
+    checkpoint = torch.load(test_from, map_location=lambda storage, loc: storage)
+    opt = vars(checkpoint['opt'])
+    for k in opt.keys():
+        if (k in model_flags):
+            setattr(args, k, opt[k])
+
+    model = AbsSummarizer(args, device, checkpoint)
+    model.eval()
+
+    debug_iter = data_loader.Dataloader(args, load_dataset(args, 'dev', shuffle=False),
+                                        args.batch_size, device,
+                                        shuffle=False, is_test=False)
+
+    tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', do_lower_case=True, cache_dir=args.temp_dir)
+    symbols = {'BOS': tokenizer.vocab['[unused0]'], 'EOS': tokenizer.vocab['[unused1]'],
+               'PAD': tokenizer.vocab['[PAD]'], 'EOQ': tokenizer.vocab['[unused2]']}
+
+    valid_loss = abs_loss(model.generator, symbols, model.vocab_size, train=False, device=device)
+
+    trainer = build_trainer(args, device_id, model, None, valid_loss, tokenizer=tokenizer)
+    attn_log = trainer.attn_debug(debug_iter, step)
+    attn_fpout = open(args.log_attn_file, 'w')
+    attn_fpout.write(json.dumps(attn_log) + "\n")
+    attn_fpout.close()
 
 
 def test_abs(args, device_id, pt, step):

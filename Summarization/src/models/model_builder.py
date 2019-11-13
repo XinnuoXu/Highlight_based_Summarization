@@ -237,8 +237,8 @@ class AbsSummarizer(nn.Module):
 
         self.to(device)
 
-    def forward(self, src, tgt, segs, clss, mask_src, mask_tgt, mask_cls):
+    def forward(self, src, tgt, segs, clss, mask_src, mask_tgt, mask_cls, attn_debug=False):
         top_vec = self.bert(src, segs, mask_src)
         dec_state = self.decoder.init_decoder_state(src, top_vec)
-        decoder_outputs, state = self.decoder(tgt[:, :-1], top_vec, dec_state)
-        return decoder_outputs, None, top_vec
+        decoder_outputs, state = self.decoder(tgt[:, :-1], top_vec, dec_state, attn_debug=attn_debug)
+        return decoder_outputs, state, top_vec
