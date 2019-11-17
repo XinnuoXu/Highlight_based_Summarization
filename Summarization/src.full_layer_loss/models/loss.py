@@ -79,7 +79,9 @@ class LossComputeBase(nn.Module):
                              src_mem_bank=None, 
                              alignment=None, 
                              mask_alg=None,
-                             mask_tgt=None):
+                             mask_tgt=None,
+                             saved_attn=None,
+                             loss_ws=None):
         """
         Compute the forward loss for the batch.
 
@@ -95,7 +97,15 @@ class LossComputeBase(nn.Module):
         """
         #shard_state = self._make_shard_state(batch, output)
         #_, batch_stats = self._compute_loss(batch, **shard_state)
-        _, batch_stats = self._compute_loss(batch, output, batch.tgt[:,1:], src_mem_bank, alignment, mask_alg, mask_tgt)
+        _, batch_stats = self._compute_loss(batch, \
+                output, \
+                batch.tgt[:,1:], \
+                src_mem_bank, \
+                alignment, \
+                mask_alg, \
+                mask_tgt, \
+                saved_attn, \
+                loss_ws)
 
         return batch_stats
 

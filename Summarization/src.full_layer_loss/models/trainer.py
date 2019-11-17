@@ -210,7 +210,14 @@ class Trainer(object):
                 mask_alg = batch.mask_alg
 
                 outputs, state, src_mem_bank = self.model(src, tgt, segs, clss, mask_src, mask_tgt, mask_cls, attn_debug=True)
-                batch_stats = self.loss.monolithic_compute_loss(batch, outputs, src_mem_bank, alignment, mask_alg, mask_tgt)
+                batch_stats = self.loss.monolithic_compute_loss(batch, \
+                        outputs, \
+                        src_mem_bank, \
+                        alignment, \
+                        mask_alg, \
+                        mask_tgt, \
+                        saved_attn = state.s2t_attn, \
+                        loss_ws=state.loss_ws)
 
                 json_obj = {}
                 ex_loss = batch_stats.loss
@@ -247,9 +254,17 @@ class Trainer(object):
                 mask_cls = batch.mask_cls
                 mask_alg = batch.mask_alg
 
-                outputs, _, src_mem_bank = self.model(src, tgt, segs, clss, mask_src, mask_tgt, mask_cls)
+                outputs, state, src_mem_bank = self.model(src, tgt, segs, clss, mask_src, mask_tgt, mask_cls)
 
-                batch_stats = self.loss.monolithic_compute_loss(batch, outputs, src_mem_bank, alignment, mask_alg, mask_tgt)
+                batch_stats = self.loss.monolithic_compute_loss(batch, \
+                        outputs, \
+                        src_mem_bank, \
+                        alignment, \
+                        mask_alg, \
+                        mask_tgt, \
+                        saved_attn = state.s2t_attn, \
+                        loss_ws=state.loss_ws)
+
                 stats.update(batch_stats)
             self._report_step(0, step, valid_stats=stats)
             return stats
