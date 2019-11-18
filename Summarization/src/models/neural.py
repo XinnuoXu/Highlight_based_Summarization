@@ -300,7 +300,7 @@ class MultiHeadedAttention(nn.Module):
             self.final_linear = nn.Linear(model_dim, model_dim)
 
     def forward(self, key, value, query, mask=None,
-                layer_cache=None, type=None, predefined_graph_1=None):
+                layer_cache=None, type=None, predefined_graph_1=None, attn_debug=False):
         """
         Compute the context vector and the attention vectors.
 
@@ -424,13 +424,19 @@ class MultiHeadedAttention(nn.Module):
             attn = torch.cat([attn[:, :-1], attn_masked.unsqueeze(1)], 1)
 
         drop_attn = self.dropout(attn)
+
+        if attn_debug:
+            ret_attn = attn
+        else:
+            ret_attn = None
+
         if (self.use_final_linear):
             context = unshape(torch.matmul(drop_attn, value))
             output = self.final_linear(context)
-            return output
+            return output, ret_attn
         else:
             context = torch.matmul(drop_attn, value)
-            return context
+            return context, ret_attn
 
         # CHECK
         # batch_, q_len_, d_ = output.size()

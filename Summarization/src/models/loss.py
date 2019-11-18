@@ -249,7 +249,7 @@ class NMTLossCompute(LossComputeBase):
         y = torch.ones(attn.size()[0]).cuda()
         attn_loss = self.criterion_attn(alignment, attn, y)
         attn_loss = attn_loss.view(batch, tgt_len)
-        attn_loss = attn_loss.masked_fill(1-mask_tgt, 0.0).sum() * 10
+        attn_loss = attn_loss.masked_fill(1-mask_tgt, 0.0).sum()
 
         # NLLoss
         bottled_output = self._bottle(output)

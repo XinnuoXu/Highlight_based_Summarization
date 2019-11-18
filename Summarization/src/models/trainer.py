@@ -15,7 +15,7 @@ def _tally_parameters(model):
     return n_params
 
 
-def build_trainer(args, device_id, model, optims,loss):
+def build_trainer(args, device_id, model, optims,loss, tokenizer=None):
     """
     Simplify `Trainer` creation based on user `opt`s*
     Args:
@@ -49,7 +49,7 @@ def build_trainer(args, device_id, model, optims,loss):
     report_manager = ReportMgr(args.report_every, start_time=-1, tensorboard_writer=writer)
 
 
-    trainer = Trainer(args, model, optims, loss, grad_accum_count, n_gpu, gpu_rank, report_manager)
+    trainer = Trainer(args, model, optims, loss, grad_accum_count, n_gpu, gpu_rank, report_manager, tokenizer)
 
     # print(tr)
     if (model):
@@ -86,7 +86,7 @@ class Trainer(object):
 
     def __init__(self,  args, model,  optims, loss,
                   grad_accum_count=1, n_gpu=1, gpu_rank=1,
-                  report_manager=None):
+                  report_manager=None, vocab=None):
         # Basic attributes.
         self.args = args
         self.save_checkpoint_steps = args.save_checkpoint_steps
@@ -96,6 +96,7 @@ class Trainer(object):
         self.n_gpu = n_gpu
         self.gpu_rank = gpu_rank
         self.report_manager = report_manager
+        self.vocab = vocab
 
         self.loss = loss
 
@@ -175,6 +176,54 @@ class Trainer(object):
 
         return total_stats
 
+    def ids_2_toks(self, ids):
+        ex_num, src_len = ids.size()
+        toks = []
+        for i in range(ex_num):
+            toks.append([self.vocab.ids_to_tokens[int(w)] for w in ids[i]])
+        return toks
+
+    def attn_debug(self, valid_iter, step=0):
+        """ Validate model.
+            valid_iter: validate data iterator
+        Returns:
+            :obj:`nmt.Statistics`: validation loss statistics
+        """
+        # Set model in validating mode.
+        self.model.eval()
+        stats = Statistics()
+
+        json_objs = []
+        with torch.no_grad():
+            for batch in valid_iter:
+                # batch size has to be 1
+                assert batch.src.size(0) == 1
+                src = batch.src
+                tgt = batch.tgt
+                segs = batch.segs
+                clss = batch.clss
+                alignment = batch.alignment
+
+                mask_src = batch.mask_src
+                mask_tgt = batch.mask_tgt
+                mask_cls = batch.mask_cls
+                mask_alg = batch.mask_alg
+
+                outputs, state, src_mem_bank = self.model(src, tgt, segs, clss, mask_src, mask_tgt, mask_cls, attn_debug=True)
+                batch_stats = self.loss.monolithic_compute_loss(batch, outputs, src_mem_bank, alignment, mask_alg, mask_tgt)
+
+                json_obj = {}
+                ex_loss = batch_stats.loss
+                str_src = self.ids_2_toks(src)[0]
+                str_tgt = self.ids_2_toks(tgt[:, :-1])[0]
+                json_obj["ex_loss"] = ex_loss
+                json_obj["src"] = str_src
+                json_obj["tgt"] = str_tgt
+                json_obj["attn"] = [attn.cpu().tolist() for attn in state.s2t_attn]
+                json_objs.append(json_obj)
+
+        return json_objs
+
     def validate(self, valid_iter, step=0):
         """ Validate model.
             valid_iter: validate data iterator
@@ -226,7 +275,7 @@ class Trainer(object):
             mask_cls = batch.mask_cls
             mask_alg = batch.mask_alg
 
-            outputs, scores, src_mem_bank = self.model(src, tgt,segs, clss, mask_src, mask_tgt, mask_cls)
+            outputs, _, src_mem_bank = self.model(src, tgt,segs, clss, mask_src, mask_tgt, mask_cls)
             batch_stats = self.loss.sharded_compute_loss(batch, outputs, self.args.generator_shard_size, normalization, \
                     src_mem_bank=src_mem_bank, alignment=alignment, mask_alg=mask_alg, mask_tgt=mask_tgt)
 

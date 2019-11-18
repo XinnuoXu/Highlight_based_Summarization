@@ -43,7 +43,7 @@ class TransformerDecoderLayer(nn.Module):
         self.register_buffer('mask', mask)
 
     def forward(self, inputs, memory_bank, src_pad_mask, tgt_pad_mask,
-                previous_input=None, layer_cache=None, step=None):
+                previous_input=None, layer_cache=None, step=None, attn_debug=False):
         """
         Args:
             inputs (`FloatTensor`): `[batch_size x 1 x model_dim]`
@@ -68,7 +68,7 @@ class TransformerDecoderLayer(nn.Module):
             all_input = torch.cat((previous_input, input_norm), dim=1)
             dec_mask = None
 
-        query = self.self_attn(all_input, all_input, input_norm,
+        query, _ = self.self_attn(all_input, all_input, input_norm,
                                      mask=dec_mask,
                                      layer_cache=layer_cache,
                                      type="self")
@@ -76,14 +76,14 @@ class TransformerDecoderLayer(nn.Module):
         query = self.drop(query) + inputs
 
         query_norm = self.layer_norm_2(query)
-        mid = self.context_attn(memory_bank, memory_bank, query_norm,
+        mid, ret_attn = self.context_attn(memory_bank, memory_bank, query_norm,
                                       mask=src_pad_mask,
                                       layer_cache=layer_cache,
-                                      type="context")
+                                      type="context",
+                                      attn_debug=attn_debug)
         output = self.feed_forward(self.drop(mid) + query)
 
-        return output, all_input
-        # return output
+        return output, all_input, ret_attn
 
     def _get_attn_subsequent_mask(self, size):
         """
@@ -152,7 +152,7 @@ class TransformerDecoder(nn.Module):
         self.layer_norm = nn.LayerNorm(d_model, eps=1e-6)
 
     def forward(self, tgt, memory_bank, state, memory_lengths=None,
-                step=None, cache=None,memory_masks=None):
+                step=None, cache=None, memory_masks=None, attn_debug=False):
         """
         See :obj:`onmt.modules.RNNDecoderBase.forward()`
         """
@@ -184,22 +184,24 @@ class TransformerDecoder(nn.Module):
 
         if state.cache is None:
             saved_inputs = []
+            saved_attn = []
 
         for i in range(self.num_layers):
             prev_layer_input = None
             if state.cache is None:
                 if state.previous_input is not None:
                     prev_layer_input = state.previous_layer_inputs[i]
-            output, all_input \
-                = self.transformer_layers[i](
+            output, all_input, s2t_attn = self.transformer_layers[i](
                     output, src_memory_bank,
                     src_pad_mask, tgt_pad_mask,
                     previous_input=prev_layer_input,
                     layer_cache=state.cache["layer_{}".format(i)]
                     if state.cache is not None else None,
-                    step=step)
+                    step=step,
+                    attn_debug=attn_debug)
             if state.cache is None:
                 saved_inputs.append(all_input)
+                saved_attn.append(s2t_attn)
 
         if state.cache is None:
             saved_inputs = torch.stack(saved_inputs)
@@ -209,7 +211,7 @@ class TransformerDecoder(nn.Module):
         # Process the result and update the attentions.
 
         if state.cache is None:
-            state = state.update_state(tgt, saved_inputs)
+            state = state.update_state(tgt, saved_inputs, saved_attn)
 
         return output, state
 
@@ -236,6 +238,7 @@ class TransformerDecoderState(DecoderState):
         self.previous_input = None
         self.previous_layer_inputs = None
         self.cache = None
+        self.s2t_attn = None
 
     @property
     def _all(self):
@@ -257,19 +260,20 @@ class TransformerDecoderState(DecoderState):
             self.previous_layer_inputs = self.previous_layer_inputs.detach()
         self.src = self.src.detach()
 
-    def update_state(self, new_input, previous_layer_inputs):
+    def update_state(self, new_input, previous_layer_inputs, saved_attn):
         state = TransformerDecoderState(self.src)
         state.previous_input = new_input
         state.previous_layer_inputs = previous_layer_inputs
+        state.s2t_attn = saved_attn
         return state
 
     def _init_cache(self, memory_bank, num_layers):
         self.cache = {}
-
+    
         for l in range(num_layers):
             layer_cache = {
                 "memory_keys": None,
-                "memory_values": None
+                "memory_values": None,
             }
             layer_cache["self_keys"] = None
             layer_cache["self_values"] = None
