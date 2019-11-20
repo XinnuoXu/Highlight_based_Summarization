@@ -46,19 +46,19 @@ class Batch(object):
             if not is_test:
                 pre_alignment = [x[5] for x in data]
                 alignment = torch.tensor(self._pad_alignment(pre_alignment, 0))
-                mask_alg = 1 - (alignment == 0)
+                mask_alg = 1-(alignment == 0)
 
             src = torch.tensor(self._pad(pre_src, 0))
             tgt = torch.tensor(self._pad(pre_tgt, 0))
 
             segs = torch.tensor(self._pad(pre_segs, 0))
-            mask_src = 1 - (src == 0)
-            mask_tgt = 1 - (tgt == 0)
+            mask_src = 1-(src == 0)
+            mask_tgt = 1-(tgt == 0)
 
 
             clss = torch.tensor(self._pad(pre_clss, -1))
             src_sent_labels = torch.tensor(self._pad(pre_src_sent_labels, 0))
-            mask_cls = 1 - (clss == -1)
+            mask_cls = 1-(clss == -1)
             clss[clss == -1] = 0
             setattr(self, 'clss', clss.to(device))
             setattr(self, 'mask_cls', mask_cls.to(device))

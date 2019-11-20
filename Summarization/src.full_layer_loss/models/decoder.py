@@ -201,16 +201,15 @@ class TransformerDecoder(nn.Module):
                     step=step)
             if state.cache is None:
                 saved_inputs.append(all_input)
-                if self.layer_loss:
-                    saved_attn.append(s2t_attn)
+                saved_attn.append(s2t_attn)
 
         if state.cache is None:
             saved_inputs = torch.stack(saved_inputs)
-            if self.layer_loss:
-                saved_attn = torch.stack(saved_attn)
-                saved_attn = saved_attn.transpose(0, 1)
-                batch_size, layer_num, heads_num, t_len, s_len = saved_attn.size()
-                saved_attn = saved_attn.contiguous().view(batch_size, -1, t_len, s_len)
+
+            saved_attn = torch.stack(saved_attn)
+            saved_attn = saved_attn.transpose(0, 1)
+            batch_size, layer_num, heads_num, t_len, s_len = saved_attn.size()
+            saved_attn = saved_attn.contiguous().view(batch_size, -1, t_len, s_len)
 
         output = self.layer_norm(output)
 

@@ -139,6 +139,10 @@ def validate_abs(args, device_id):
         for xent, cp in xent_lst:
             step = int(cp.split('.')[-2].split('_')[-1])
             test_abs(args, device_id, cp, step)
+    elif args.test_from != "":
+        cp = args.test_from
+        step = int(cp.split('.')[-2].split('_')[-1])
+        xent = validate(args, device_id, cp, step)
     else:
         while (True):
             cp_files = sorted(glob.glob(os.path.join(args.model_path, 'model_step_*.pt')))
@@ -360,7 +364,9 @@ def train_abs_single(args, device_id):
                'PAD': tokenizer.vocab['[PAD]'], 'EOQ': tokenizer.vocab['[unused2]']}
 
     train_loss = abs_loss(model.generator, symbols, model.vocab_size, device, train=True,
-                          label_smoothing=args.label_smoothing)
+                          label_smoothing=args.label_smoothing, 
+                          full_layer_loss = args.full_layer_loss, 
+                          nll_loss = args.nll_loss)
 
     trainer = build_trainer(args, device_id, model, optim, train_loss)
 

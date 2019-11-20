@@ -12,10 +12,12 @@ import torch.nn.functional as F
 from models.reporter import Statistics
 
 
-def abs_loss(generator, symbols, vocab_size, device, train=True, label_smoothing=0.0):
+def abs_loss(generator, symbols, vocab_size, device, train=True, label_smoothing=0.0,
+        full_layer_loss = False, nll_loss = True):
     compute = NMTLossCompute(
         generator, symbols, vocab_size,
-        label_smoothing=label_smoothing if train else 0.0)
+        label_smoothing=label_smoothing if train else 0.0,
+        full_layer_loss = full_layer_loss, nll_loss = nll_loss)
     compute.to(device)
     return compute
 
@@ -232,7 +234,8 @@ class NMTLossCompute(LossComputeBase):
     """
 
     def __init__(self, generator, symbols, vocab_size,
-                 label_smoothing=0.0):
+                 label_smoothing=0.0,
+                 full_layer_loss = False, nll_loss = True):
         super(NMTLossCompute, self).__init__(generator, symbols['PAD'])
         self.sparse = not isinstance(generator[1], nn.LogSoftmax)
         if label_smoothing > 0:
@@ -246,6 +249,8 @@ class NMTLossCompute(LossComputeBase):
         self.criterion_attn = nn.CosineEmbeddingLoss(reduce=False)
         self.softmax = nn.Softmax(dim=-1)
         self.logsoftmax = nn.LogSoftmax(dim=-1)
+        self.full_layer_loss = full_layer_loss
+        self.nll_loss = nll_loss
 
     def _make_shard_state(self, batch, output):
         return {
@@ -289,8 +294,8 @@ class NMTLossCompute(LossComputeBase):
         mask_tgt = mask_tgt.repeat(heads_num, 1, 1)
         attn_loss = attn_loss.masked_fill(1-mask_tgt, 0.0)
 
-        loss_ws = self.softmax(loss_ws)
-        attn_loss = torch.matmul(loss_ws, attn_loss.view(heads_num, -1)).sum() * 10
+        loss_ws = self.softmax(loss_ws) * loss_ws.size(0)
+        attn_loss = torch.matmul(loss_ws, attn_loss.view(heads_num, -1)).sum()
 
         # NLLoss
         bottled_output = self._bottle(output)
@@ -298,7 +303,13 @@ class NMTLossCompute(LossComputeBase):
         gtruth =target.contiguous().view(-1)
         nll_loss = self.criterion(scores, gtruth)
 
-        loss = nll_loss + attn_loss
+        if self.full_layer_loss and self.nll_loss:
+            attn_loss = attn_loss * 0.05
+            loss = nll_loss + attn_loss
+        elif self.full_layer_loss:
+            loss = attn_loss
+        else:
+            loss = nll_loss
         stats = self._stats(loss.clone(), scores, gtruth, \
                 other_loss=[attn_loss.item(), nll_loss.item()], names=["attn_loss", "nll_loss"])
 
