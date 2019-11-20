@@ -119,7 +119,7 @@ def highlight_filter(toks, stop_words):
             b_strong = False
             continue
         if b_strong:
-            if tok not in stop_words:
+            if (tok not in stop_words) and len(tok)>1:
                 non_stop_toks.append(tok)
     if len(non_stop_toks) == 0:
         return True
