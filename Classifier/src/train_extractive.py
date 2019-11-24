@@ -111,6 +111,7 @@ def validate_ext(args, device_id):
         for i, cp in enumerate(cp_files):
             step = int(cp.split('.')[-2].split('_')[-1])
             xent = validate(args, device_id, cp, step)
+            print ("**********\nxent:", xent, "\n**********")
             xent_lst.append((xent, cp))
             max_step = xent_lst.index(min(xent_lst))
             if (i - max_step > 10):
@@ -164,7 +165,7 @@ def validate(args, device_id, pt, step):
     model = ExtSummarizer(args, device, checkpoint)
     model.eval()
 
-    valid_iter = data_loader.Dataloader(args, load_dataset(args, 'valid', shuffle=False),
+    valid_iter = data_loader.Dataloader(args, load_dataset(args, 'dev', shuffle=False),
                                         args.batch_size, device,
                                         shuffle=False, is_test=False)
     trainer = build_trainer(args, device_id, model, None)

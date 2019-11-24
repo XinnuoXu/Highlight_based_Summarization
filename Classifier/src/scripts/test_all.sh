@@ -1,11 +1,11 @@
 #!/bin/bash
 
-BERT_DATA_PATH=/scratch/xxu/bert/data.alg/xsum
+BERT_DATA_PATH=/scratch/xxu/bert/data.cls/xsum
 #MODEL_PATH=/scratch/xxu/bert/models.alg/
-MODEL_PATH=/scratch/xxu/bert/models.alg.ra/
+MODEL_PATH=/scratch/xxu/bert/models.cls/
 
 python train.py \
-	-task abs \
+	-task ext \
 	-mode validate \
 	-test_all \
 	-batch_size 3000 \

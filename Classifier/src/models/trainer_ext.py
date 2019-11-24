@@ -182,18 +182,8 @@ class Trainer(object):
 
         with torch.no_grad():
             for batch in valid_iter:
-                src = batch.src
-                labels = batch.src_sent_labels
-                segs = batch.segs
-                clss = batch.clss
-                mask = batch.mask_src
-                mask_cls = batch.mask_cls
-
-                sent_scores, mask = self.model(src, segs, clss, mask, mask_cls)
-
-                loss = self.loss(sent_scores, labels.float())
-                loss = (loss * mask.float()).sum()
-                batch_stats = Statistics(float(loss.cpu().data.numpy()), len(labels))
+                batch_size = batch.p_pair.size(0)
+                batch_stats, _, _ = self._main(batch, batch_size, is_train=False)
                 stats.update(batch_stats)
             self._report_step(0, step, valid_stats=stats)
             return stats
@@ -228,71 +218,84 @@ class Trainer(object):
 
         can_path = '%s_step%d.candidate' % (self.args.result_path, step)
         gold_path = '%s_step%d.gold' % (self.args.result_path, step)
+        all_preds = []
         with open(can_path, 'w') as save_pred:
             with open(gold_path, 'w') as save_gold:
                 with torch.no_grad():
                     for batch in test_iter:
-                        src = batch.src
-                        labels = batch.src_sent_labels
-                        segs = batch.segs
-                        clss = batch.clss
-                        mask = batch.mask_src
-                        mask_cls = batch.mask_cls
+                        batch_size = batch.p_pair.size(0)
+                        batch_stats, p_scores, n_scores = self._main(batch, batch_size, is_train=False)
+                        stats.update(batch_stats)
 
-                        gold = []
-                        pred = []
+                        scores = []; preds = []
+                        for i, idx in enumerate(p_scores):
+                            p = p_scores[i].cpu().data.numpy()
+                            n = n_scores[i].cpu().data.numpy()
+                            scores.append(str(p) + '\t' + str(n))
+                            preds.append(int(p > n))
+                            all_preds.append(int(p > n))
 
-                        if (cal_lead):
-                            selected_ids = [list(range(batch.clss.size(1)))] * batch.batch_size
-                        elif (cal_oracle):
-                            selected_ids = [[j for j in range(batch.clss.size(1)) if labels[i][j] == 1] for i in
-                                            range(batch.batch_size)]
-                        else:
-                            sent_scores, mask = self.model(src, segs, clss, mask, mask_cls)
-
-                            loss = self.loss(sent_scores, labels.float())
-                            loss = (loss * mask.float()).sum()
-                            batch_stats = Statistics(float(loss.cpu().data.numpy()), len(labels))
-                            stats.update(batch_stats)
-
-                            sent_scores = sent_scores + mask.float()
-                            sent_scores = sent_scores.cpu().data.numpy()
-                            selected_ids = np.argsort(-sent_scores, 1)
-                        # selected_ids = np.sort(selected_ids,1)
-                        for i, idx in enumerate(selected_ids):
-                            _pred = []
-                            if (len(batch.src_str[i]) == 0):
-                                continue
-                            for j in selected_ids[i][:len(batch.src_str[i])]:
-                                if (j >= len(batch.src_str[i])):
-                                    continue
-                                candidate = batch.src_str[i][j].strip()
-                                if (self.args.block_trigram):
-                                    if (not _block_tri(candidate, _pred)):
-                                        _pred.append(candidate)
-                                else:
-                                    _pred.append(candidate)
-
-                                if ((not cal_oracle) and (not self.args.recall_eval) and len(_pred) == 3):
-                                    break
-
-                            _pred = '<q>'.join(_pred)
-                            if (self.args.recall_eval):
-                                _pred = ' '.join(_pred.split()[:len(batch.tgt_str[i].split())])
-
-                            pred.append(_pred)
-                            gold.append(batch.tgt_str[i])
-
-                        for i in range(len(gold)):
-                            save_gold.write(gold[i].strip() + '\n')
-                        for i in range(len(pred)):
-                            save_pred.write(pred[i].strip() + '\n')
-        if (step != -1 and self.args.report_rouge):
-            rouges = test_rouge(self.args.temp_dir, can_path, gold_path)
-            logger.info('Rouges at step %d \n%s' % (step, rouge_results_to_str(rouges)))
+                        for i in range(len(scores)):
+                            save_gold.write(scores[i] + '\n')
+                        for i in range(len(preds)):
+                            save_pred.write(str(preds[i]) + '\n')
+        print ("**********************")
+        print (sum(all_preds), len(all_preds))
+        print ("ACC: ", sum(all_preds)/float(len(all_preds)))
+        print ("**********************")
         self._report_step(0, step, valid_stats=stats)
 
         return stats
+
+    def _loss_cal(self, p_pred_score, n_pred_score, p_doc_highlight, n_doc_highlight, normalization, is_train):
+        # highligh distance loss
+        y = -1 * torch.ones(p_doc_highlight.size(0)).cuda()
+        hl_loss = self.loss(p_doc_highlight, n_doc_highlight, y)
+        # topk loss
+        p_topk = torch.topk(p_doc_highlight, k=30, dim=1)[0].sum()
+        n_topk = torch.topk(n_doc_highlight, k=30, dim=1)[0].sum()
+        topk_loss = (p_topk + n_topk) * 0.5
+        # Predict scores difference
+        p_loss = p_pred_score.sum()
+        n_loss = n_pred_score.sum()
+
+        pred_distance = p_loss-n_loss
+        #dis_loss = torch.log(1 + torch.exp(-1 * (pred_distance-2)))
+        loss = (-1000) * pred_distance + topk_loss + hl_loss
+        if is_train:
+            loss.backward()
+
+        batch_stats = Statistics(float(loss.cpu().data.numpy()), \
+                float(p_loss.cpu().data.numpy()), \
+                float(n_loss.cpu().data.numpy()), \
+                float(hl_loss.cpu().data.numpy()), \
+                float(topk_loss.cpu().data.numpy()),\
+                normalization)
+        
+        return batch_stats, p_pred_score, n_pred_score
+
+    def _main(self, batch, normalization, is_train=True):
+        p_pair = batch.p_pair
+        n_pair = batch.n_pair
+        p_segs = batch.p_segs
+        n_segs = batch.n_segs
+        p_mask = batch.p_mask
+        n_mask = batch.n_mask
+        p_summ_mask = batch.p_summ_mask
+        n_summ_mask = batch.p_summ_mask
+
+        model_input = (p_pair, n_pair, p_segs, n_segs, p_mask, n_mask, p_summ_mask, n_summ_mask)
+
+        p_pred_score, n_pred_score, p_doc_highlight, n_doc_highlight = self.model(model_input)
+
+        batch_stats, p_scores, n_scores = self._loss_cal(p_pred_score, \
+                n_pred_score, \
+                p_doc_highlight,\
+                n_doc_highlight, \
+                normalization, \
+                is_train)
+        return batch_stats, p_scores, n_scores
+
 
     def _gradient_accumulation(self, true_batchs, normalization, total_stats,
                                report_stats):
@@ -303,40 +306,7 @@ class Trainer(object):
             if self.grad_accum_count == 1:
                 self.model.zero_grad()
 
-            p_pair = batch.p_pair
-            n_pair = batch.n_pair
-            p_segs = batch.p_segs
-            n_segs = batch.n_segs
-            p_mask = batch.p_mask
-            n_mask = batch.n_mask
-            p_summ_mask = batch.p_summ_mask
-            n_summ_mask = batch.p_summ_mask
-
-            model_input = (p_pair, n_pair, p_segs, n_segs, p_mask, n_mask, p_summ_mask, n_summ_mask)
-
-            p_pred_score, n_pred_score, p_doc_highlight, n_doc_highlight = self.model(model_input)
-
-            # highligh distance loss
-            y = -1 * torch.ones(p_doc_highlight.size(0)).cuda()
-            hl_loss = self.loss(p_doc_highlight, n_doc_highlight, y)
-            # topk loss
-            p_topk = torch.topk(p_doc_highlight, k=30, dim=1)[0].sum()
-            n_topk = torch.topk(n_doc_highlight, k=30, dim=1)[0].sum()
-            topk_loss = (p_topk + n_topk) * 0.5
-            # Predict scores difference
-            p_loss = p_pred_score.sum()
-            n_loss = n_pred_score.sum()
-            #pred_loss = torch.log(1 + torch.exp(-1 * pred_distance))
-
-            loss = (-10) * p_loss + 10 * n_loss + 0.2 * hl_loss + (-0.2) * topk_loss
-            loss.backward()
-
-            batch_stats = Statistics(float(loss.cpu().data.numpy()), \
-                    float(p_loss.sum().cpu().data.numpy()), \
-                    float(n_loss.sum().cpu().data.numpy()), \
-                    float(hl_loss.cpu().data.numpy()), \
-                    float(topk_loss.cpu().data.numpy()), \
-                    normalization)
+            batch_stats, _, _ = self._main(batch, normalization)
 
             total_stats.update(batch_stats)
             report_stats.update(batch_stats)
