@@ -146,8 +146,8 @@ def get_attn_dists(context_embs, summary_emb, context_emb_weight, summary_emb_we
             if label_classify(context[j]) != label_classify(summary[i]):
                 attn.append(0)
             else:
-                #score = set_2_set(s_emb, c_emb, summary_emb_weight[i], context_emb_weight[j], func="max")
-                score = set_2_set_sum(s_emb, c_emb, summary_emb_weight[i], context_emb_weight[j])
+                score = set_2_set(s_emb, c_emb, summary_emb_weight[i], context_emb_weight[j], func="max")
+                #score = set_2_set_sum(s_emb, c_emb, summary_emb_weight[i], context_emb_weight[j])
                 attn.append(score)
         sum_label = label_classify(summary[i])
         attn_dists.append(np.array(attn))
@@ -416,6 +416,36 @@ class DataSet:
 
     def get_max_len(self, batch_id):
         return max([len(item) for item in batch_id])
+
+    def preprocess(self):
+        tmp_examples = []
+        for i, src in enumerate(self.in_src):
+            src_list = []
+            for item in src.split("\t"):
+                clean_item = self.clean(item)
+                if clean_item != "":
+                    src_list.append(clean_item)
+            tgt = self.clean(self.in_tgt[i])
+            tmp_examples.append(DocSumPair(src_list, tgt, self.tokenizer))
+            if (i+1)%BATCH_SIZE == 0:
+                batch_id = self.pad(tmp_examples)
+                batch_id = torch.tensor(batch_id).to('cuda')
+                with torch.no_grad():
+                    last_hidden_states = self.model(batch_id)[0]
+                for i, ex in enumerate(tmp_examples):
+                    ex.get_emb(last_hidden_states[i])
+                    json_str = highlight_score(ex, self.stop_words)
+                    self.fpout.write(json_str + "\n")
+                del tmp_examples[:]
+        if len(tmp_examples) > 0:
+            batch_id = self.pad(tmp_examples)
+            batch_id = torch.tensor(batch_id).to('cuda')
+            with torch.no_grad():
+                last_hidden_states = self.model(batch_id)[0]
+            for i, ex in enumerate(tmp_examples):
+                ex.get_emb(last_hidden_states[i])
+                json_str = highlight_score(ex, self.stop_words)
+                self.fpout.write(json_str + "\n")
 
     def preprocess_mult(self):
         tmp_examples = []; doc_ids = []
