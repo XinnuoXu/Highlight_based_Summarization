@@ -32,7 +32,7 @@ def label_classify(item):
         return "reference"
     return "token"
 
-def bert_sentence(line, stop_words, embeddings, truncate_id):
+def tok_emb_to_phrase(line, stop_words, embeddings, truncate_id):
     embs = []
     tokens = []
     embs_weight = []
@@ -85,9 +85,9 @@ def bert_sentence(line, stop_words, embeddings, truncate_id):
                     embs[phrase_id_stack[-1]].append(bert_emb)
                     embs_weight[phrase_id_stack[-1]].append(1)
                     tokens[phrase_id_stack[-1]].append(item)
-                embs[fact_id_stack[-1]].append(bert_emb)
-                embs_weight[fact_id_stack[-1]].append(1)
-                tokens[fact_id_stack[-1]].append(item)
+                #embs[fact_id_stack[-1]].append(bert_emb)
+                #embs_weight[fact_id_stack[-1]].append(1)
+                #tokens[fact_id_stack[-1]].append(item)
             term_id += 1
     return embs, embs_weight, tokens
 
@@ -132,7 +132,7 @@ def set_2_set(s_emb, c_emb, s_emb_w, c_emb_w, func="max"):
     else:
         return attn_score / non_stop_word_num
 
-def get_attn_dists(context_embs, summary_emb, context_emb_weight, summary_emb_weight, context, summary, context_tokens, summary_tokens):
+def get_phrase_attn(context_embs, summary_emb, context_emb_weight, summary_emb_weight, context, summary):
     attn_dists = []
     p_gens = []
     term_len = len(context_embs)
@@ -152,94 +152,91 @@ def get_attn_dists(context_embs, summary_emb, context_emb_weight, summary_emb_we
         sum_label = label_classify(summary[i])
         attn_dists.append(np.array(attn))
         p_gens.append(max(attn))
-
-        '''
-        log = []
-        for j, item in enumerate(attn):
-            log.append(str(attn[j]) + "|" + context[j])
-        arr = np.array(attn)
-        print (" ".join(log))
-        threshold_idx = arr.argsort()[-1:]
-        print (summary[i])
-        print (summary_tokens[i])
-        print ("++++++++++++")
-        for idx in threshold_idx:
-            print (context[idx])
-            print (context_tokens[idx])
-            print (arr[idx])
-            print ("**********")
-        '''
     return attn_dists, p_gens
 
-def doc_summary_classifier(p_gens, summary, summary_emb):
-    # fact2fact matching
-    fact_scores = []
-    fact_match = True
-    for i, item in enumerate(summary):
-        if label_classify(item) == "fact":
-            if len(summary_emb[i]) == 0:
-                # fact with only stop words
+def phrase_attn_to_fact(attn, context):
+    fact_idx = []; fact_stack = []; fact_ph_size = [0] * len(context)
+    type_stack = []
+    for i, tok in enumerate(context):
+        cls = label_classify(tok)
+        if cls == "fact":
+            fact_idx.append(i)
+            fact_stack.append(i)
+            type_stack.append(cls)
+        elif cls == "phrase":
+            type_stack.append(cls)
+            #attn[fact_stack[-1]] += attn[i]
+            #fact_ph_size[fact_stack[-1]] += 1
+            for idx in fact_stack:
+                attn[idx] += attn[i]
+                fact_ph_size[idx] += 1
+        elif cls == "end":
+            if type_stack.pop() == "fact":
+                fact_stack.pop()
+    for i in range(len(context)):
+        if i not in fact_idx:
+            attn[i] = 0.0
+        else:
+            idx = i
+            if fact_ph_size[idx] == 0:
                 continue
-            fact_scores.append(p_gens[i])
-            if p_gens[i] < THRESHOLD_FACT:
-                fact_match = False
-                break
-    #print ("Fact scores:", fact_scores)
-    if fact_match:
-        return "fact_match"
+            attn[idx] = attn[idx] / fact_ph_size[idx]
+    return attn
 
-    # phrase level matching
-    phrase_num = 0.0
-    matched_phrase = 0.0
-    phrase_scores = []
-    for i, item in enumerate(summary):
-        if label_classify(item) == "phrase":
-            if len(summary_emb[i]) == 0:
-                # phrase with only stop words
-                continue
-            phrase_num += 1
-            phrase_scores.append(p_gens[i])
-            if p_gens[i] < THRESHOLD_PHRASE:
-                continue
-            else:
-                matched_phrase += 1
-    #print ("Phrase scores:", phrase_scores)
-    #print (phrase_num, matched_phrase)
-    if phrase_num > 0 and matched_phrase / phrase_num > 0.7:
-        return "phrase_match"
+def get_fact_attn(attn_dists, p_gens, context, summary):
+    fact_idx = []; fact_stack = []; fact_ph_size = [0] * len(summary)
+    type_stack = []
+    for i, tok in enumerate(summary):
+        cls = label_classify(tok)
+        if cls == "fact":
+            fact_idx.append(i)
+            fact_stack.append(i)
+            type_stack.append(cls)
+        elif cls == "phrase":
+            type_stack.append(cls)
+            attn_dists[fact_stack[-1]] += attn_dists[i]
+            fact_ph_size[fact_stack[-1]] += 1
+            #for idx in fact_stack:
+                #attn_dists[idx] += attn_dists[i]
+                #fact_ph_size[idx] += 1
+        elif cls == "end":
+            if type_stack.pop() == "fact":
+                fact_stack.pop()
+    for idx in fact_idx:
+        if fact_ph_size[idx] == 0:
+            continue
+        attn_dists[idx] = phrase_attn_to_fact(attn_dists[idx], context)
+        attn_dists[idx] = attn_dists[idx] / fact_ph_size[idx]
+        p_gens[idx] = max(attn_dists[idx])
+    return attn_dists, p_gens
 
-    # not related
-    token_num = 0.0
-    matched_token = 0.0
-    token_scores = []
-    for i, item in enumerate(summary):
-        if label_classify(item) == "token":
-            token_scores.append(p_gens[i])
-            token_num += 1
-            if p_gens[i] > -1 and p_gens[i] < THRESHOLD_TOKEN:
-                continue
-            else:
-                matched_token += 1
-    #print ("Token scores:", token_scores)
-    if token_num == 0 or matched_token / token_num < 0.7:
-        return "not related"
-    return "rephrase"
+def _top_n_filter(tok_align, n):
+    if n == -1:
+        return tok_align
+    threshold = max(np.sort(tok_align)[-1] * 0.7, np.sort(tok_align)[-n])
+    for i in range(len(tok_align)):
+        if tok_align[i] < threshold:
+            tok_align[i] = 0.0
+    return tok_align
 
 def highlight_score(ex, stop_words):
-    context_emb, context_emb_weight, context_tokens = bert_sentence(ex.ctx, stop_words, ex.ctx_embs, ex.trunc_ctx_id)
-    summary_emb, summary_emb_weight, summary_tokens = bert_sentence(ex.sum, stop_words, ex.sum_embs, len(ex.sum)+1)
-    attn_dists, p_gens = get_attn_dists(context_emb, \
+    # phrase level alignment
+    context_emb, context_emb_weight, context_tokens = tok_emb_to_phrase(ex.ctx, stop_words, ex.ctx_embs, ex.trunc_ctx_id)
+    summary_emb, summary_emb_weight, summary_tokens = tok_emb_to_phrase(ex.sum, stop_words, ex.sum_embs, len(ex.sum)+1)
+    attn_dists, p_gens = get_phrase_attn(context_emb, \
             summary_emb, \
             context_emb_weight, \
             summary_emb_weight, \
             ex.ctx, \
-            ex.sum, \
-            context_tokens, summary_tokens)
-    class_type = doc_summary_classifier(p_gens, ex.sum, summary_emb)
+            ex.sum)
+    attn_dists = [_top_n_filter(item, 10) for item in attn_dists]
+    # fact level alignment
+    attn_dists, p_gens = get_fact_attn(attn_dists, p_gens, ex.ctx, ex.sum)
+
     json_obj = {}
     json_obj["article_lst"] = ex.ctx
     json_obj["decoded_lst"] = ex.sum
-    json_obj["abstract_str"] = class_type
+    json_obj["abstract_str"] = "..."
     json_obj["attn_dists"] = [item.tolist() for item in attn_dists]
     json_obj["p_gens"] = p_gens
     json_obj["ctx_trees"] = ex.ctx_trees
@@ -485,14 +482,11 @@ class DataSet:
 def multiprocessing_func(args):
     (ex, last_hidden_states, stop_words, doc_id) = args
 
-    try:
-        ex.get_emb(last_hidden_states)
-        json_obj = highlight_score(ex, stop_words)
-        if doc_id != -1:
-            json_obj["doc_id"] = doc_id
-        json_str = json.dumps(json_obj)
-    except:
-        return ""
+    ex.get_emb(last_hidden_states)
+    json_obj = highlight_score(ex, stop_words)
+    if doc_id != -1:
+        json_obj["doc_id"] = doc_id
+    json_str = json.dumps(json_obj)
 
     return json_str
 
