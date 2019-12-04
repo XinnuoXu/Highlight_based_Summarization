@@ -5,14 +5,14 @@ import os
 import json
 sys.path.append(os.path.abspath('../Document_highlight.GloVE/'))
 sys.path.append(os.path.abspath('../Document_highlight.BERT/'))
-from highlight import GloVE_Highlight
-from quality_classifier_HighRES import highlight
+from highlight_HROUGED import highlight
 
 if __name__ == '__main__':
     ids = []
     for filename in os.listdir("../HROUGE_data/documents/"):
         ids.append(filename.split(".")[0])
     if sys.argv[1] == "highligh":
+        from highlight import GloVE_Highlight
         glove_hl = GloVE_Highlight()
         for file_id in ids:
             src_path = "./50_trees/" + file_id + ".src"
