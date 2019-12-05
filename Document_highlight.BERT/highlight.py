@@ -183,6 +183,12 @@ def phrase_attn_to_fact(attn, context):
             attn[idx] = attn[idx] / fact_ph_size[idx]
     return attn
 
+def reweight_fact_attn(attn):
+    max_a = max(attn)
+    if max_a == 0:
+        return attn
+    return (attn / max_a) * 0.8
+
 def get_fact_attn(attn_dists, p_gens, context, summary):
     fact_idx = []; fact_stack = []; fact_ph_size = [0] * len(summary)
     type_stack = []
@@ -207,6 +213,7 @@ def get_fact_attn(attn_dists, p_gens, context, summary):
             continue
         attn_dists[idx] = phrase_attn_to_fact(attn_dists[idx], context)
         attn_dists[idx] = attn_dists[idx] / fact_ph_size[idx]
+        attn_dists[idx] = reweight_fact_attn(attn_dists[idx])
         p_gens[idx] = max(attn_dists[idx])
     return attn_dists, p_gens
 
@@ -214,6 +221,7 @@ def _top_n_filter(tok_align, n):
     if n == -1:
         return tok_align
     threshold = max(np.sort(tok_align)[-1] * 0.7, np.sort(tok_align)[-n])
+    #threshold = np.sort(tok_align)[-1] * 0.8
     for i in range(len(tok_align)):
         if tok_align[i] < threshold:
             tok_align[i] = 0.0

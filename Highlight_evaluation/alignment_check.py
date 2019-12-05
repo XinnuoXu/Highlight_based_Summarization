@@ -3,6 +3,7 @@
 import json
 import sys
 import os
+import numpy as np
 from evaluation_metrics import *
 from scipy.stats import pearsonr
 
@@ -185,6 +186,7 @@ def get_prediction(attn_dists, article_lst, decoded_lst, task):
 
 def correlation(gtruth, pred, doc_id):
     corrs = []
+    p_sum = []; g_sum = []
     for item in pred:
         if item not in gtruth:
             continue
@@ -193,13 +195,20 @@ def correlation(gtruth, pred, doc_id):
         if sum(gtruth[item]) == 0 or sum(pred[item]) == 0:
             continue
         g = gtruth[item]
-        p = _top_n_filter(pred[item], 10)
-        print (doc_id, item)
-        print ("g", g)
-        print ("p", p)
-        print (pearsonr(g, p)[0])
+        p = pred[item]
+        #p = _top_n_filter(pred[item], 10)
+        #print (doc_id, item)
+        #print ("g", g)
+        #print ("p", p)
+        #print (pearsonr(g, p)[0])
+        p_sum.append(p)
+        g_sum.append(g)
         corrs.append(pearsonr(g, p)[0])
-    return corrs
+    if len(g_sum) == 0 or len(p_sum) == 0:
+        return [], 0
+    g_add = sum(np.array(g_sum)).tolist()
+    p_add = sum(np.array(p_sum)).tolist()
+    return corrs, pearsonr(g_add, p_add)[0]
 
 if __name__ == '__main__':
     prediction_path = "Bert_highlight/"
@@ -210,7 +219,7 @@ if __name__ == '__main__':
 
     gold_highlight = load_gold(gold_highlight_path)
 
-    corrs = []
+    corrs = []; corr_all = []
     for filename in os.listdir(prediction_path):
         with open(prediction_path + filename, 'r') as file:
             json_obj = json.loads(file.read().strip())
@@ -226,7 +235,13 @@ if __name__ == '__main__':
         gold_human_label = gold_highlight[doc_id]
         gtruth = get_ground_truth(article_lst, gold_human_label, sys.argv[1])
         pred = get_prediction(attn_dists, article_lst, decoded_lst, sys.argv[1])
-        corrs.extend(correlation(gtruth, pred, doc_id))
+        corr_detail, corr = correlation(gtruth, pred, doc_id)
+        if len(corr_detail) > 0:
+            corrs.extend(corr_detail)
+            corr_all.append(corr)
+
     print (corrs)
+    print (corr_all)
     print (sum(corrs)/len(corrs))
+    print (sum(corr_all)/len(corr_all))
 
