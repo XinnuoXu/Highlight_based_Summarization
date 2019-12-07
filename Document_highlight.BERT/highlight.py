@@ -8,8 +8,8 @@ import copy
 import numpy as np
 from scipy.spatial.distance import cosine
 import torch
-from transformers import *
-#from pytorch_transformers import *
+#from transformers import *
+from pytorch_transformers import *
 import multiprocessing
 
 CUR_DIR = os.path.dirname(os.path.realpath(__file__))
@@ -512,7 +512,7 @@ if __name__ == '__main__':
         src_path = "./tmp_data/corpus_g2g_" + label + "_src_.txt"
         tgt_path = "./tmp_data/corpus_g2g_" + label + "_tgt_.txt"
         fpout_path = './highlights.bert/xsum_' + label + ".jsonl"
-        dataset = DataSet(src_path, tgt_path, fpout_path, label, thred_num)
+        dataset = DataSet(src_path, tgt_path, fpout_path, thred_num)
         dataset.preprocess_mult()
     if sys.argv[1] == "test":
         thred_num = 1
