@@ -1,0 +1,1 @@
+(F1-plans (ARG0 a council ) (V plans ) (ARG1 to (F2-employ (ARG0 *trace-F1-ARG0* ) (V employ ) (ARG1 its own staff ) (ARG2 to (F3-help (ARG0 *trace-F2-ARG1* ) (V help ) (ARG1 young people with mental health problems ) ) ) ) ) )

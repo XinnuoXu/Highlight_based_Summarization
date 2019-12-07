@@ -246,6 +246,8 @@ if __name__ == '__main__':
             hyp_dir = '../HROUGE_data/summaries/system_tconvs2s/'
         elif sys.argv[2] == "PT":
             hyp_dir = '../HROUGE_data/summaries/system_ptgen/'
+        elif  sys.argv[2] == "Bert":
+            hyp_dir = '../HROUGE_data/summaries/system_bert/'
         elif  sys.argv[2] == "Ref":
             hyp_dir = '../HROUGE_data/summaries/ref_gold/'
         get_hardy_rouge(ref_dir, hyp_dir)

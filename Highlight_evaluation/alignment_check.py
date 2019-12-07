@@ -6,6 +6,7 @@ import os
 import numpy as np
 from evaluation_metrics import *
 from scipy.stats import pearsonr
+from scipy import spatial
 
 def _label_classify(item):
     if item[0] == '(':
@@ -22,7 +23,8 @@ def _label_classify(item):
 def _top_n_filter(tok_align, n):
     if n == -1:
         return tok_align
-    threshold = np.sort(tok_align)[-n]
+    #threshold = max(np.sort(tok_align)[-1] * 0.6, np.sort(tok_align)[-n])
+    threshold = np.sort(tok_align)[-1] * 0.3
     for i in range(len(tok_align)):
         if tok_align[i] < threshold:
             tok_align[i] = 0.0
@@ -184,6 +186,11 @@ def get_prediction(attn_dists, article_lst, decoded_lst, task):
     else:
         return _prediction_token(article_lst, attn_dists, decoded_lst)
 
+def true_false(g, p):
+    g_ = np.array(g)
+    p_ = np.array(p)
+    return 1 - spatial.distance.cosine(g_ > 0 , p_ > 0.2)
+
 def correlation(gtruth, pred, doc_id):
     corrs = []
     p_sum = []; g_sum = []
@@ -196,7 +203,7 @@ def correlation(gtruth, pred, doc_id):
             continue
         g = gtruth[item]
         p = pred[item]
-        #p = _top_n_filter(pred[item], 10)
+        #p = _top_n_filter(pred[item], 5)
         #print (doc_id, item)
         #print ("g", g)
         #print ("p", p)
@@ -205,10 +212,10 @@ def correlation(gtruth, pred, doc_id):
         g_sum.append(g)
         corrs.append(pearsonr(g, p)[0])
     if len(g_sum) == 0 or len(p_sum) == 0:
-        return [], 0
+        return [], 0, 0
     g_add = sum(np.array(g_sum)).tolist()
     p_add = sum(np.array(p_sum)).tolist()
-    return corrs, pearsonr(g_add, p_add)[0]
+    return corrs, pearsonr(g_add, p_add)[0], true_false(g_add, p_add)
 
 if __name__ == '__main__':
     prediction_path = "Bert_highlight/"
@@ -219,7 +226,7 @@ if __name__ == '__main__':
 
     gold_highlight = load_gold(gold_highlight_path)
 
-    corrs = []; corr_all = []
+    corrs = []; corr_all = []; ids = []; corrs_01 = []
     for filename in os.listdir(prediction_path):
         with open(prediction_path + filename, 'r') as file:
             json_obj = json.loads(file.read().strip())
@@ -235,13 +242,17 @@ if __name__ == '__main__':
         gold_human_label = gold_highlight[doc_id]
         gtruth = get_ground_truth(article_lst, gold_human_label, sys.argv[1])
         pred = get_prediction(attn_dists, article_lst, decoded_lst, sys.argv[1])
-        corr_detail, corr = correlation(gtruth, pred, doc_id)
+        corr_detail, corr, corr_01 = correlation(gtruth, pred, doc_id)
         if len(corr_detail) > 0:
             corrs.extend(corr_detail)
             corr_all.append(corr)
+            corrs_01.append(corr_01)
+            ids.append(doc_id)
 
-    print (corrs)
-    print (corr_all)
-    print (sum(corrs)/len(corrs))
+    #print (corrs)
+    #print (corr_all)
+    #for i, item in enumerate(corr_all):
+    #    print (ids[i], item)
     print (sum(corr_all)/len(corr_all))
+    print (sum(corrs_01)/len(corrs_01))
 

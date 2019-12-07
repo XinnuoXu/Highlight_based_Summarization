@@ -6,7 +6,7 @@ sys.path.append(os.path.abspath('../Document_highlight.BERT/'))
 from highlight import *
 from highlight_HROUGED import *
 
-def merge_file(ids):
+def merge_file(ids, tgt_dir="./50_trees/"):
     tmp_src = open("tmp.src", "w")
     tmp_tgt = open("tmp.tgt", "w")
     for file_id in ids:
@@ -15,33 +15,56 @@ def merge_file(ids):
             line = file.read().strip()
         tmp_src.write(line + "\n")
 
-        tgt_path = "./50_trees/" + file_id + ".tgt"
+        tgt_path = tgt_dir + "/" + file_id + ".tgt"
         with open(tgt_path, 'r') as file:
-            line = file.read().strip() + "\t" + file_id
+            line = file.read().strip().replace(" [ UNK ] ", " ") + "\t" + file_id
         tmp_tgt.write(line + "\n")
     tmp_src.close()
     tmp_tgt.close()
     return "tmp.src", "tmp.tgt"
 
-def split_file(tmp_out):
+def split_file(tmp_out, fpout_base="./Bert_highlight/"):
     for line in open(tmp_out):
         line = line.strip()
         file_id = json.loads(line)["doc_id"]
-        fpout_path = "./Bert_highlight/" + file_id + ".hl"
+        fpout_path = fpout_base + "/" + file_id + ".hl"
         fpout=open(fpout_path, "w")
         fpout.write(line)
         fpout.close()
+
+def simple_format(tgt_file):
+    fpout = open("tmp.tgt", "w")
+    for i, line in enumerate(open(tgt_file)):
+        fpout.write(line.strip() + "\t" + str(i) + "\n")
+    fpout.close()
+    return "tmp.tgt"
 
 if __name__ == '__main__':
     ids = []
     for filename in os.listdir("../HROUGE_data/documents/"):
         ids.append(filename.split(".")[0])
+    if sys.argv[1] == "highlight_simple_format":
+        tmp_src = sys.argv[2]
+        tmp_tgt = sys.argv[3]
+        tmp_output = sys.argv[4]
+        tmp_tgt = simple_format(tmp_tgt)
+        dataset = DataSet(tmp_src, tmp_tgt, tmp_output, thred_num=20)
+        dataset.preprocess_mult()
     if sys.argv[1] == "highlight":
-        tmp_src, tmp_tgt = merge_file(ids)
+        if len(sys.argv) == 2:
+            tmp_src, tmp_tgt = merge_file(ids)
+        else:
+            tmp_src, tmp_tgt = merge_file(ids, sys.argv[2])
         tmp_output = "tmp.output"
         dataset = DataSet(tmp_src, tmp_tgt, tmp_output, thred_num=20)
         dataset.preprocess_mult()
-        split_file(tmp_output)
+        if len(sys.argv) == 2:
+            split_file(tmp_output)
+        else:
+            fpout_path = ".".join(sys.argv[2].split(".")[:-1]) + ".alg"
+            if not os.path.exists(fpout_path):
+                os.system("mkdir " + fpout_path)
+            split_file(tmp_output, fpout_path)
     if sys.argv[1] == "merge":
         for file_id in ids:
             file_selected_articles = "./Bert_highlight/" + file_id + ".hl"
@@ -60,7 +83,6 @@ if __name__ == '__main__':
             fpout = open("./Bert_phrase/" + file_id + ".json", "w")
             fpout.write(json.dumps(json_obj) + "\n")
             fpout.close()
-
     if sys.argv[1] == "fact2fact":
         for file_id in ids:
             file_selected_articles = "./Bert_highlight/" + file_id + ".hl"
