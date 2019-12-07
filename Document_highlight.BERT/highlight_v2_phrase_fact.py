@@ -189,12 +189,6 @@ def reweight_fact_attn(attn):
         return attn
     return (attn / max_a) * 0.8
 
-def feature_converge(attn):
-    for i in range(len(attn)):
-        if attn[i] > 0:
-            attn[i] = 0.1
-    return attn
-
 def get_fact_attn(attn_dists, p_gens, context, summary):
     fact_idx = []; fact_stack = []; fact_ph_size = [0] * len(summary)
     type_stack = []
@@ -206,10 +200,11 @@ def get_fact_attn(attn_dists, p_gens, context, summary):
             type_stack.append(cls)
         elif cls == "phrase":
             type_stack.append(cls)
-            for idx in fact_stack:
-                #attn_dists[idx] += feature_converge(attn_dists[i])
-                attn_dists[idx] += attn_dists[i]
-                fact_ph_size[idx] += 1
+            attn_dists[fact_stack[-1]] += attn_dists[i]
+            fact_ph_size[fact_stack[-1]] += 1
+            #for idx in fact_stack:
+                #attn_dists[idx] += attn_dists[i]
+                #fact_ph_size[idx] += 1
         elif cls == "end":
             if type_stack.pop() == "fact":
                 fact_stack.pop()
@@ -225,7 +220,6 @@ def get_fact_attn(attn_dists, p_gens, context, summary):
 def _top_n_filter(tok_align, n):
     if n == -1:
         return tok_align
-    n = min(len(tok_align), n)
     threshold = max(np.sort(tok_align)[-1] * 0.6, np.sort(tok_align)[-n])
     #threshold = np.sort(tok_align)[-1] * 0.5
     for i in range(len(tok_align)):
@@ -383,7 +377,7 @@ class DocSumPair:
         fpout.write(json.dumps(json_obj) + "\n")
 
 class DataSet:
-    def __init__(self, src_path, tgt_path, fpout_path, thred_num=20):
+    def __init__(self, src_path, tgt_path, fpout_path, thred_num=10):
         self.thred_num = thred_num
         self.model_class = BertModel
         self.tokenizer_class = BertTokenizer

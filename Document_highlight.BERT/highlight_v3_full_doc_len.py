@@ -189,12 +189,6 @@ def reweight_fact_attn(attn):
         return attn
     return (attn / max_a) * 0.8
 
-def feature_converge(attn):
-    for i in range(len(attn)):
-        if attn[i] > 0:
-            attn[i] = 0.1
-    return attn
-
 def get_fact_attn(attn_dists, p_gens, context, summary):
     fact_idx = []; fact_stack = []; fact_ph_size = [0] * len(summary)
     type_stack = []
@@ -206,10 +200,11 @@ def get_fact_attn(attn_dists, p_gens, context, summary):
             type_stack.append(cls)
         elif cls == "phrase":
             type_stack.append(cls)
-            for idx in fact_stack:
-                #attn_dists[idx] += feature_converge(attn_dists[i])
-                attn_dists[idx] += attn_dists[i]
-                fact_ph_size[idx] += 1
+            attn_dists[fact_stack[-1]] += attn_dists[i]
+            fact_ph_size[fact_stack[-1]] += 1
+            #for idx in fact_stack:
+                #attn_dists[idx] += attn_dists[i]
+                #fact_ph_size[idx] += 1
         elif cls == "end":
             if type_stack.pop() == "fact":
                 fact_stack.pop()
@@ -219,13 +214,13 @@ def get_fact_attn(attn_dists, p_gens, context, summary):
         attn_dists[idx] = phrase_attn_to_fact(attn_dists[idx], context)
         attn_dists[idx] = attn_dists[idx] / fact_ph_size[idx]
         attn_dists[idx] = reweight_fact_attn(attn_dists[idx])
+        attn_dists[idx] = attn_dists[idx]
         p_gens[idx] = max(attn_dists[idx])
     return attn_dists, p_gens
 
 def _top_n_filter(tok_align, n):
     if n == -1:
         return tok_align
-    n = min(len(tok_align), n)
     threshold = max(np.sort(tok_align)[-1] * 0.6, np.sort(tok_align)[-n])
     #threshold = np.sort(tok_align)[-1] * 0.5
     for i in range(len(tok_align)):
@@ -243,10 +238,6 @@ def highlight_score(ex, stop_words):
             summary_emb_weight, \
             ex.ctx, \
             ex.sum)
-    attn_dists = [_top_n_filter(item, 10) for item in attn_dists]
-    # fact level alignment
-    attn_dists, p_gens = get_fact_attn(attn_dists, p_gens, ex.ctx, ex.sum)
-
     json_obj = {}
     json_obj["article_lst"] = ex.ctx
     json_obj["decoded_lst"] = ex.sum
@@ -383,7 +374,8 @@ class DocSumPair:
         fpout.write(json.dumps(json_obj) + "\n")
 
 class DataSet:
-    def __init__(self, src_path, tgt_path, fpout_path, thred_num=20):
+    def __init__(self, src_path, tgt_path, fpout_path, thred_num=10):
+        self.doc_trunk_size = 100
         self.thred_num = thred_num
         self.model_class = BertModel
         self.tokenizer_class = BertTokenizer
@@ -428,6 +420,81 @@ class DataSet:
     def get_max_len(self, batch_id):
         return max([len(item) for item in batch_id])
 
+    def get_tokens(self, tree):
+        tokens = []
+        for item in tree.split(" "):
+            if len(item) == 0:
+                continue
+            l_type = label_classify(item)
+            if l_type in ["token"]:
+                tokens.append(item)
+        return tokens
+
+    def trunkate_document(self, src_list):
+        trunks = []; tmp_t = []; cur_size = 0
+        for sentence in src_list:
+            toks = self.get_tokens(sentence)
+            if len(toks) + cur_size > self.doc_trunk_size:
+                trunks.append(tmp_t)
+                tmp_t = []
+                cur_size = len(toks)
+                tmp_t.append(sentence)
+            else:
+                tmp_t.append(sentence)
+                cur_size += len(toks)
+        if len(tmp_t) > 0:
+            trunks.append(tmp_t)
+        return trunks
+
+    def merge_trunks(self, result_list):
+        docs = {}
+        for jobj in result_list:
+            doc_id = jobj["doc_id"]
+            [doc_id, trunk_id] = doc_id.split("-")
+            if doc_id not in docs:
+                docs[doc_id] = {}
+            docs[doc_id][int(trunk_id)] = jobj
+
+        results = []
+        for doc_id in docs:
+            doc = docs[doc_id]
+            json_obj = {}
+            json_obj["article_lst"] = []
+            json_obj["decoded_lst"] = []
+            json_obj["abstract_str"] = "..."
+            json_obj["attn_dists"] = []
+            json_obj["p_gens"] = []
+            json_obj["ctx_trees"] = []
+            json_obj["sum_tree"] = []
+            json_obj["doc_id"] = doc_id
+
+            for trunk in sorted(doc.items(), key = lambda d:d[0]):
+                json_obj["article_lst"].extend(trunk[1]["article_lst"])
+                json_obj["decoded_lst"] = trunk[1]["decoded_lst"]
+                json_obj["ctx_trees"].extend(trunk[1]["ctx_trees"])
+                json_obj["sum_tree"] = trunk[1]["sum_tree"]
+                if len(json_obj["p_gens"]) == 0:
+                    json_obj["p_gens"] = trunk[1]["p_gens"]
+                    json_obj["attn_dists"] = trunk[1]["attn_dists"]
+                else:
+                    json_obj["p_gens"] = max(json_obj["p_gens"], json_obj["p_gens"])
+                    for i in range(len(json_obj["attn_dists"])):
+                        json_obj["attn_dists"][i].extend(trunk[1]["attn_dists"][i])
+
+            json_obj["attn_dists"] = [np.array(item) for item in json_obj["attn_dists"]]
+            attn_dists = [_top_n_filter(item, 20) for item in json_obj["attn_dists"]]
+
+            # fact level alignment
+            attn_dists, p_gens = get_fact_attn(json_obj["attn_dists"], \
+                    json_obj["p_gens"], \
+                    json_obj["article_lst"], json_obj["decoded_lst"])
+
+            json_obj["attn_dists"] = [item.tolist() for item in json_obj["attn_dists"]]
+
+            results.append(json_obj)
+        return results
+            
+
     def preprocess_mult(self):
         tmp_examples = []; doc_ids = []
         for i, src in enumerate(self.in_src):
@@ -443,8 +510,10 @@ class DataSet:
             else:
                 doc_id = -1
             tgt = self.clean(self.in_tgt[i])
-            tmp_examples.append(DocSumPair(src_list, tgt, self.tokenizer))
-            doc_ids.append(doc_id)
+            src_trunks = self.trunkate_document(src_list)
+            for trunk_id, src_t in enumerate(src_trunks):
+                tmp_examples.append(DocSumPair(src_t, tgt, self.tokenizer))
+                doc_ids.append(doc_id + "-" + str(trunk_id))
             if (i+1)%BATCH_SIZE == 0:
                 batch_id = self.pad(tmp_examples)
                 batch_id = torch.tensor(batch_id).to('cuda')
@@ -455,9 +524,9 @@ class DataSet:
                 for j, ex in enumerate(tmp_examples):
                     exs.append((ex, last_hidden_states[j], self.stop_words, doc_ids[j]))
                 result_list = self.pool.map(multiprocessing_func, exs)
+                result_list = self.merge_trunks(result_list)
                 for js in result_list:
-                    if js != "":
-                        self.fpout.write(js + "\n")
+                    self.fpout.write(json.dumps(js) + "\n")
                 del tmp_examples[:]
                 del doc_ids[:]
 
@@ -471,9 +540,9 @@ class DataSet:
             for j, ex in enumerate(tmp_examples):
                 exs.append((ex, last_hidden_states[j], self.stop_words, doc_ids[j]))
             result_list = self.pool.map(multiprocessing_func, exs)
+            result_list = self.merge_trunks(result_list)
             for js in result_list:
-                if js != "":
-                    self.fpout.write(js + "\n")
+                self.fpout.write(json.dumps(js) + "\n")
 
     def get_BERT_emb(self):
         tmp_examples = []
@@ -501,9 +570,8 @@ def multiprocessing_func(args):
     json_obj = highlight_score(ex, stop_words)
     if doc_id != -1:
         json_obj["doc_id"] = doc_id
-    json_str = json.dumps(json_obj)
 
-    return json_str
+    return json_obj
 
 if __name__ == '__main__':
     if sys.argv[1] == "data":
