@@ -100,7 +100,7 @@ def _filter_attn(article_lst, attn, task):
     return phrase_attn
 
 def _prediction_phrase(article_lst, attn_dists, decoded_lst):
-    ret_scores = {}; type_stuck = []; fact_stuck = []
+    ret_scores = []; type_stuck = []; fact_stuck = []
     for i, tok in enumerate(decoded_lst):
         cls = _label_classify(tok)
         if cls == "fact":
@@ -109,11 +109,14 @@ def _prediction_phrase(article_lst, attn_dists, decoded_lst):
         elif cls == "phrase":
             type_stuck.append(cls)
             tag = fact_stuck[-1][1:] + "|||" + tok[1:]
-            ret_scores[tag] = _filter_attn(article_lst, attn_dists[i], "phrase")
+            ret_scores.append(np.array(_filter_attn(article_lst, attn_dists[i], "phrase")))
         elif cls == "end":
             if type_stuck.pop() == "fact":
                 fact_stuck.pop()
-    return ret_scores
+    if len(ret_scores) == 0:
+        return []
+    ret_scores = sum(ret_scores) / len(ret_scores)
+    return ret_scores.tolist()
 
 def _fact_to_tokens(article_lst):
     fact_dict = []; fact_idx = []
@@ -145,13 +148,14 @@ def _fact_to_tokens(article_lst):
     return fact_dict
 
 def _prediction_fact(article_lst, attn_dists, decoded_lst):
-    ret_scores = {}
+    ret_scores = []
     for i, tok in enumerate(decoded_lst):
         cls = _label_classify(tok)
         if cls == "fact":
             tag = tok[1:]
-            ret_scores[tag] = _filter_attn(article_lst, attn_dists[i], "fact")
-    return ret_scores
+            ret_scores.append(np.array(_filter_attn(article_lst, attn_dists[i], "fact")))
+    ret_scores = sum(ret_scores) / len(ret_scores)
+    return ret_scores.tolist()
 
 def get_ground_truth(doc_tree, gold_human_label, task):
     if task == "phrase":
@@ -184,15 +188,13 @@ def map_all_tok_to_fact(attn, doc):
 
 def get_ground_truth_fact(phrase_to_tokens, doc):
     ret_scores = {}
-    for fact_tag in phrase_to_tokens:
-        ph_score = map_phrase_to_all_tok(phrase_to_tokens[fact_tag], doc)
-        ph_score = phrase_attn_to_fact(ph_score, doc)
-        ret_scores[fact_tag] = map_all_tok_to_fact(ph_score, doc)
-    return ret_scores
+    ph_score = map_phrase_to_all_tok(phrase_to_tokens, doc)
+    ph_score = phrase_attn_to_fact(ph_score, doc)
+    return map_all_tok_to_fact(ph_score, doc)
 
 def get_ground_truth_phrase(doc, gold_human_label):
-    ret_scores = {}
     phrase_to_tokens = _phrase_to_tokens(doc)
+    phrase_scores = []
     for tag in gold_human_label:
         json_obj = gold_human_label[tag]
         uni_gram = json_obj["uni_gram"]
@@ -211,8 +213,9 @@ def get_ground_truth_phrase(doc, gold_human_label):
                 ph_scores.append(0.0)
             else:
                 ph_scores.append(score/len(ph))
-        ret_scores[tag] = ph_scores
-    return ret_scores
+        phrase_scores.append(np.array(ph_scores))
+    phrase_scores = (sum(phrase_scores) / len(phrase_scores)).tolist()
+    return phrase_scores
 
 def get_prediction(attn_dists, article_lst, decoded_lst, task):
     if task == "phrase":
@@ -225,36 +228,14 @@ def get_prediction(attn_dists, article_lst, decoded_lst, task):
 def true_false(g, p):
     g_ = np.array(g)
     p_ = np.array(p)
-    return 1 - spatial.distance.cosine(g_ > 0 , p_ > 0.2)
-
-def res_filter(scores):
-    return [s if s > 0.4 else 0.0 for s in scores]
+    return 1 - spatial.distance.cosine(g_ > 0 , p_ > 0.1)
 
 def correlation(gtruth, pred, doc_id):
-    corrs = []
-    p_sum = []; g_sum = []
-    for item in pred:
-        if item not in gtruth:
-            continue
-        if len(gtruth[item]) == 0 or len(pred[item]) == 0:
-            continue
-        if sum(gtruth[item]) == 0 or sum(pred[item]) == 0:
-            continue
-        g = gtruth[item]
-        p = pred[item]
-        #p = _top_n_filter(pred[item], 5)
-        #print (doc_id, item)
-        #print ("g", g)
-        #print ("p", p)
-        #print (pearsonr(g, p)[0])
-        p_sum.append(p)
-        g_sum.append(g)
-        corrs.append(pearsonr(g, p)[0])
-    if len(g_sum) == 0 or len(p_sum) == 0:
-        return [], 0, 0
-    g_add = sum(np.array(g_sum)).tolist()
-    p_add = sum(np.array(p_sum)).tolist()
-    return corrs, pearsonr(g_add, p_add)[0], true_false(g_add, p_add)
+    if len(gtruth) < 2 or len(pred) < 2:
+        return -2, -2
+    if sum(gtruth) == 0 or sum(pred) == 0:
+        return -2, -2
+    return pearsonr(gtruth, pred)[0], true_false(gtruth, pred)
 
 if __name__ == '__main__':
     prediction_path = "Bert_highlight/"
@@ -281,9 +262,8 @@ if __name__ == '__main__':
         gold_human_label = gold_highlight[doc_id]
         gtruth = get_ground_truth(article_lst, gold_human_label, sys.argv[1])
         pred = get_prediction(attn_dists, article_lst, decoded_lst, sys.argv[1])
-        corr_detail, corr, corr_01 = correlation(gtruth, pred, doc_id)
-        if len(corr_detail) > 0:
-            corrs.extend(corr_detail)
+        corr, corr_01 = correlation(gtruth, pred, doc_id)
+        if corr > -2:
             corr_all.append(corr)
             corrs_01.append(corr_01)
             ids.append(doc_id)

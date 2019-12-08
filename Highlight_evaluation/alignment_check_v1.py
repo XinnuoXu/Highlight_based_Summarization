@@ -7,8 +7,6 @@ import numpy as np
 from evaluation_metrics import *
 from scipy.stats import pearsonr
 from scipy import spatial
-sys.path.append(os.path.abspath('./'))
-from alignment_check import get_ground_truth
 
 def _label_classify(item):
     if item[0] == '(':
@@ -25,7 +23,8 @@ def _label_classify(item):
 def _top_n_filter(tok_align, n):
     if n == -1:
         return tok_align
-    threshold = np.sort(tok_align)[-n]
+    #threshold = max(np.sort(tok_align)[-1] * 0.6, np.sort(tok_align)[-n])
+    threshold = np.sort(tok_align)[-1] * 0.3
     for i in range(len(tok_align)):
         if tok_align[i] < threshold:
             tok_align[i] = 0.0
@@ -48,7 +47,7 @@ def _g2g_token_replace(tokens):
             tokens[i] = "-rsb-"
     return tokens
 
-def load_gold(gold_highlight_path, doc_trees, task):
+def load_gold(gold_highlight_path):
     gold_highlight = {}
     for line in open(gold_highlight_path):
         json_obj = json.loads(line.strip())
@@ -61,14 +60,34 @@ def load_gold(gold_highlight_path, doc_trees, task):
             gold_highlight[doc_id][tag] = json_obj
         else:
             gold_highlight[doc_id] = json_obj
+    return gold_highlight
 
-    gtruths = {}
-    for doc_id in gold_highlight: 
-        article_lst = doc_trees[doc_id]
-        gtruth = get_ground_truth(article_lst, gold_highlight[doc_id], task)
-        gtruths[doc_id] = gtruth
-
-    return gtruths
+def _phrase_to_tokens(article_lst):
+    phrase_dict = []; phrase_idx = []
+    type_stack = []
+    counter = {}
+    for i, token in enumerate(article_lst):
+        token_type = _label_classify(token)
+        if token_type == "fact":
+            type_stack.append(token_type)
+        elif token_type == "phrase":
+            type_stack.append(token_type)
+            phrase_idx.append(len(phrase_dict))
+            phrase_dict.append([])
+        elif token_type == "end":
+            pop_type = type_stack.pop()
+            if pop_type == "phrase":
+                phrase_idx.pop()
+        elif token_type != "reference":
+            if token not in counter:
+                counter[token] = 0
+            else:
+                counter[token] += 1
+            pos = counter[token]
+            token = str(pos) + "-" + token
+            if len(type_stack) > 0 and type_stack[-1] == "phrase":
+                phrase_dict[phrase_idx[-1]].append(token)
+    return phrase_dict
 
 def _filter_attn(article_lst, attn, task):
     phrase_attn = []
@@ -94,6 +113,35 @@ def _prediction_phrase(article_lst, attn_dists, decoded_lst):
                 fact_stuck.pop()
     return ret_scores
 
+def _fact_to_tokens(article_lst):
+    fact_dict = []; fact_idx = []
+    type_stack = []
+    counter = {}
+    for i, token in enumerate(article_lst):
+        token_type = _label_classify(token)
+        if token_type == "fact":
+            type_stack.append(token_type)
+            fact_idx.append(len(fact_dict))
+            fact_dict.append([])
+        elif token_type == "phrase":
+            type_stack.append(token_type)
+        elif token_type == "end":
+            pop_type = type_stack.pop()
+            if pop_type == "fact":
+                fact_idx.pop()
+        elif token_type != "reference":
+            if token not in counter:
+                counter[token] = 0
+            else:
+                counter[token] += 1
+            pos = counter[token]
+            token = str(pos) + "-" + token
+            for j in range(len(fact_idx)):
+                fact_dict[fact_idx[j]].append(token)
+            #if len(fact_idx) > 0:
+            #    fact_dict[fact_idx[-1]].append(token)
+    return fact_dict
+
 def _prediction_fact(article_lst, attn_dists, decoded_lst):
     ret_scores = {}
     for i, tok in enumerate(decoded_lst):
@@ -101,6 +149,33 @@ def _prediction_fact(article_lst, attn_dists, decoded_lst):
         if cls == "fact":
             tag = tok[1:]
             ret_scores[tag] = _filter_attn(article_lst, attn_dists[i], "fact")
+    return ret_scores
+
+def get_ground_truth(doc, gold_human_label, task):
+    if task == "fact":
+        phrase_to_tokens = _fact_to_tokens(doc)
+    elif task == "phrase":
+        phrase_to_tokens = _phrase_to_tokens(doc)
+    ret_scores = {}
+    for tag in gold_human_label:
+        json_obj = gold_human_label[tag]
+        uni_gram = json_obj["uni_gram"]
+        uni_gram_scores = json_obj["uni_gram_scores"]
+        tok_scores = {}
+        for i, item in enumerate(uni_gram):
+            tok_scores[item] = uni_gram_scores[i]
+        ph_scores = []
+        for ph in phrase_to_tokens:
+            score = 0.0
+            for tok in ph:
+                if tok not in tok_scores:
+                    continue
+                score += tok_scores[tok]
+            if len(ph) == 0:
+                ph_scores.append(0.0)
+            else:
+                ph_scores.append(score/len(ph))
+        ret_scores[tag] = ph_scores
     return ret_scores
 
 def get_prediction(attn_dists, article_lst, decoded_lst, task):
@@ -128,13 +203,11 @@ def correlation(gtruth, pred, doc_id):
             continue
         g = gtruth[item]
         p = pred[item]
-        #p = _top_n_filter(pred[item], 10)
+        #p = _top_n_filter(pred[item], 5)
         #print (doc_id, item)
         #print ("g", g)
         #print ("p", p)
         #print (pearsonr(g, p)[0])
-        if len(g) < 2 or len(p) < 2:
-            continue
         p_sum.append(p)
         g_sum.append(g)
         corrs.append(pearsonr(g, p)[0])
@@ -142,31 +215,20 @@ def correlation(gtruth, pred, doc_id):
         return [], 0, 0
     g_add = sum(np.array(g_sum)).tolist()
     p_add = sum(np.array(p_sum)).tolist()
-    if len(g_add) < 2 or len(p_add) < 2:
-        return [], 0, 0
     return corrs, pearsonr(g_add, p_add)[0], true_false(g_add, p_add)
 
-def load_auto_alg_simple_format(prediction_path, task):
-    preds = {}
-    for line in open(prediction_path):
-        json_obj = json.loads(line.strip())
-        doc_id = json_obj['doc_id']
+if __name__ == '__main__':
+    prediction_path = "Bert_highlight/"
+    if sys.argv[1] == "phrase":
+        gold_highlight_path = "AMT_data/alignment_phrase.jsonl"
+    elif sys.argv[1] == "fact":
+        gold_highlight_path = "AMT_data/alignment_fact.jsonl"
 
-        article_lst = json_obj['article_lst']
-        decoded_lst = json_obj['decoded_lst']
-        abstract_str = json_obj['abstract_str']
-        attn_dists = json_obj['attn_dists']
-        p_gens = json_obj['p_gens']
-        #doc = _g2g_token_replace(article_lst)
+    gold_highlight = load_gold(gold_highlight_path)
 
-        pred = get_prediction(attn_dists, article_lst, decoded_lst, task)
-        preds[doc_id] = pred
-    return preds
-
-def load_auto_alg(prediction_path, task):
-    preds = {}
+    corrs = []; corr_all = []; ids = []; corrs_01 = []
     for filename in os.listdir(prediction_path):
-        with open(prediction_path + "/" + filename, 'r') as file:
+        with open(prediction_path + filename, 'r') as file:
             json_obj = json.loads(file.read().strip())
         doc_id = filename.split(".")[0]
 
@@ -177,66 +239,20 @@ def load_auto_alg(prediction_path, task):
         p_gens = json_obj['p_gens']
         #doc = _g2g_token_replace(article_lst)
 
-        pred = get_prediction(attn_dists, article_lst, decoded_lst, task)
-        preds[doc_id] = pred
-    return preds
-
-def load_doc_trees(doc_tree_path):
-    doc_trees = {}
-    for filename in os.listdir(doc_tree_path):
-        if filename.endswith("tgt"):
-            continue
-        doc_id = filename.split(".")[0]
-        with open(doc_tree_path + filename, 'r') as file:
-            doc_trees[doc_id] = file.read().strip().split()
-    return doc_trees
-
-def evaluation(gold_highlight, pred_highlight):
-    corrs = []; corr_all = []; corrs_01 = []
-    for doc_id in gold_highlight:
-        gtruth = gold_highlight[doc_id]
-        pred = pred_highlight[doc_id]
+        gold_human_label = gold_highlight[doc_id]
+        gtruth = get_ground_truth(article_lst, gold_human_label, sys.argv[1])
+        pred = get_prediction(attn_dists, article_lst, decoded_lst, sys.argv[1])
         corr_detail, corr, corr_01 = correlation(gtruth, pred, doc_id)
         if len(corr_detail) > 0:
             corrs.extend(corr_detail)
             corr_all.append(corr)
             corrs_01.append(corr_01)
+            ids.append(doc_id)
 
-    return sum(corrs)/len(corrs), sum(corr_all)/len(corr_all), sum(corrs_01)/len(corrs_01)
+    #print (corrs)
+    #print (corr_all)
+    #for i, item in enumerate(corr_all):
+    #    print (ids[i], item)
+    print (sum(corr_all)/len(corr_all))
+    print (sum(corrs_01)/len(corrs_01))
 
-if __name__ == '__main__':
-    # Load ground truth
-    if sys.argv[1] == "human":
-        doc_trees = load_doc_trees("50_trees/")
-        gold_phrase_path = "AMT_data/alignment_phrase.jsonl"
-        gold_highlight_phrase = load_gold(gold_phrase_path, doc_trees, "phrase")
-        gold_fact_path = "AMT_data/alignment_fact.jsonl"
-        gold_highlight_fact = load_gold(gold_fact_path, doc_trees, "fact")
-    elif sys.argv[1] == "system":
-        prediction_path = "Bert_highlight/"
-        gold_highlight_phrase = load_auto_alg(prediction_path, "phrase")
-        gold_highlight_fact = load_auto_alg(prediction_path, "fact")
-    elif sys.argv[1] == "auto_full":
-        prediction_path = "system_trees/" + sys.argv[2] + "_gold.alg"
-        gold_highlight_phrase = load_auto_alg_simple_format(prediction_path, "phrase")
-        gold_highlight_fact = load_auto_alg_simple_format(prediction_path, "fact")
-
-    # Load system alignment
-    if sys.argv[1] == "auto_full":
-        prediction_path = "system_trees/" + sys.argv[2] + "_full.alg"
-        highlight_phrase = load_auto_alg_simple_format(prediction_path, "phrase")
-        highlight_fact = load_auto_alg_simple_format(prediction_path, "fact")
-    else:
-        prediction_path = "system_trees/" + sys.argv[2]
-        highlight_phrase = load_auto_alg(prediction_path, "phrase")
-        highlight_fact = load_auto_alg(prediction_path, "fact")
-        
-
-    # Calculate correlation
-    fact_single, fact_merge, fact_01 = evaluation(gold_highlight_fact, highlight_fact)
-    phrase_single, phrase_merge, phrase_01 = evaluation(gold_highlight_phrase, highlight_phrase)
-
-    #print ("fact_single, fact_merge ", fact_single, fact_merge)
-    #print ("phrase_single, phrase_merge ", phrase_single, phrase_merge)
-    print ("fact", fact_merge, fact_01)
-    print ("phrase", phrase_merge, phrase_01)

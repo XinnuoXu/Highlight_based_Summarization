@@ -7,8 +7,6 @@ import numpy as np
 from evaluation_metrics import *
 from scipy.stats import pearsonr
 from scipy import spatial
-sys.path.append(os.path.abspath('./'))
-from alignment_check import get_ground_truth
 
 def _label_classify(item):
     if item[0] == '(':
@@ -70,6 +68,33 @@ def load_gold(gold_highlight_path, doc_trees, task):
 
     return gtruths
 
+def _phrase_to_tokens(article_lst):
+    phrase_dict = []; phrase_idx = []
+    type_stack = []
+    counter = {}
+    for i, token in enumerate(article_lst):
+        token_type = _label_classify(token)
+        if token_type == "fact":
+            type_stack.append(token_type)
+        elif token_type == "phrase":
+            type_stack.append(token_type)
+            phrase_idx.append(len(phrase_dict))
+            phrase_dict.append([])
+        elif token_type == "end":
+            pop_type = type_stack.pop()
+            if pop_type == "phrase":
+                phrase_idx.pop()
+        elif token_type != "reference":
+            if token not in counter:
+                counter[token] = 0
+            else:
+                counter[token] += 1
+            pos = counter[token]
+            token = str(pos) + "-" + token
+            if len(type_stack) > 0 and type_stack[-1] == "phrase":
+                phrase_dict[phrase_idx[-1]].append(token)
+    return phrase_dict
+
 def _filter_attn(article_lst, attn, task):
     phrase_attn = []
     for i, token in enumerate(article_lst):
@@ -94,6 +119,35 @@ def _prediction_phrase(article_lst, attn_dists, decoded_lst):
                 fact_stuck.pop()
     return ret_scores
 
+def _fact_to_tokens(article_lst):
+    fact_dict = []; fact_idx = []
+    type_stack = []
+    counter = {}
+    for i, token in enumerate(article_lst):
+        token_type = _label_classify(token)
+        if token_type == "fact":
+            type_stack.append(token_type)
+            fact_idx.append(len(fact_dict))
+            fact_dict.append([])
+        elif token_type == "phrase":
+            type_stack.append(token_type)
+        elif token_type == "end":
+            pop_type = type_stack.pop()
+            if pop_type == "fact":
+                fact_idx.pop()
+        elif token_type != "reference":
+            if token not in counter:
+                counter[token] = 0
+            else:
+                counter[token] += 1
+            pos = counter[token]
+            token = str(pos) + "-" + token
+            for j in range(len(fact_idx)):
+                fact_dict[fact_idx[j]].append(token)
+            #if len(fact_idx) > 0:
+            #    fact_dict[fact_idx[-1]].append(token)
+    return fact_dict
+
 def _prediction_fact(article_lst, attn_dists, decoded_lst):
     ret_scores = {}
     for i, tok in enumerate(decoded_lst):
@@ -101,6 +155,33 @@ def _prediction_fact(article_lst, attn_dists, decoded_lst):
         if cls == "fact":
             tag = tok[1:]
             ret_scores[tag] = _filter_attn(article_lst, attn_dists[i], "fact")
+    return ret_scores
+
+def get_ground_truth(doc, gold_human_label, task):
+    if task == "fact":
+        phrase_to_tokens = _fact_to_tokens(doc)
+    elif task == "phrase":
+        phrase_to_tokens = _phrase_to_tokens(doc)
+    ret_scores = {}
+    for tag in gold_human_label:
+        json_obj = gold_human_label[tag]
+        uni_gram = json_obj["uni_gram"]
+        uni_gram_scores = json_obj["uni_gram_scores"]
+        tok_scores = {}
+        for i, item in enumerate(uni_gram):
+            tok_scores[item] = uni_gram_scores[i]
+        ph_scores = []
+        for ph in phrase_to_tokens:
+            score = 0.0
+            for tok in ph:
+                if tok not in tok_scores:
+                    continue
+                score += tok_scores[tok]
+            if len(ph) == 0:
+                ph_scores.append(0.0)
+            else:
+                ph_scores.append(score/len(ph))
+        ret_scores[tag] = ph_scores
     return ret_scores
 
 def get_prediction(attn_dists, article_lst, decoded_lst, task):

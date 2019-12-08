@@ -167,8 +167,8 @@ def phrase_attn_to_fact(attn, context):
             type_stack.append(cls)
             #attn[fact_stack[-1]] += attn[i]
             #fact_ph_size[fact_stack[-1]] += 1
-            for idx in fact_stack:
-                attn[idx] += attn[i]
+            for j, idx in enumerate(fact_stack):
+                attn[idx] += attn[i] * (1 / ((len(fact_stack)-j) ** 0.5))
                 fact_ph_size[idx] += 1
         elif cls == "end":
             if type_stack.pop() == "fact":
