@@ -1,0 +1,1 @@
+(F1-says (ARGM-DIS us ) (ARG0 astronaut jeff bezos ) (V says ) (ARG1 (F2-found (ARG0 he ) has (V found ) (ARG1 five of (F3-lost (ARG1 his engines ) (R-ARG1 that ) were (V lost ) (ARGM-LOC off the coast of america ) ) ) ) ) )

@@ -34,8 +34,10 @@ if __name__ == '__main__':
                 new_toks = []
                 for tok in items:
                         if not (tok[0] == '(' or tok[0] == ')' or tok.startswith("*trace-") or tok == "£"):
+                        #if not (tok[0] == '(' or tok[0] == ')' or tok.startswith("*trace-")):
                                 new_toks.append(tok)
                 ref[doc_id] = " ".join(rewrite(new_toks))
+                #ref[doc_id] = " ".join(new_toks)
 
         file_gold = [line.strip() for line in open(sys.argv[1])]
         file_cand = [line.strip() for line in open(sys.argv[2])]
@@ -47,8 +49,13 @@ if __name__ == '__main__':
         if not os.path.exists(sys.argv[3]):
                 os.system("mkdir " + sys.argv[3])
 
+        id = 0
         for doc_id in ref:
+                id += 1
                 if ref[doc_id] in mapping:
                         fpout = open(sys.argv[3] + "/" + doc_id + ".data", "w")
                         fpout.write(mapping[ref[doc_id]] + "\n")
                         fpout.close()
+                else:
+                    print (ref[doc_id])
+        print (id)
