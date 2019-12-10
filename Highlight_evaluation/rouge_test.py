@@ -218,6 +218,16 @@ def using_155_processed_data(input_dir):
     for item in scores:
         print (item, scores[item])
 
+def get_hardy_weight(ref_path):
+    token_weights = {}
+    tokens = {}
+    for line in open(ref_path):
+        json_obj = json.loads(line.strip())
+        doc_id = json_obj["doc_id"]
+        tokens[doc_id] = " ".join(json_obj["document"])
+        token_weights[doc_id] = json_obj["uni_gram_scores"]
+    return tokens, token_weights
+
 if __name__ == '__main__':
     if sys.argv[1] == "get_docs":
         get_docs()
@@ -240,6 +250,21 @@ if __name__ == '__main__':
         elif  sys.argv[2] == "Ref":
             hyp_dir = '../HROUGE_data/summaries/ref_gold/'
         get_file_hrouge(ref_tokens, ref_token_weights, hyp_dir)
+    elif sys.argv[1] == "Hardy_hrouge":
+        ref_dir = "./Hardy_HROUGE/highres/highlight.jsonl"
+        ref_tokens, ref_token_weights = get_hardy_weight(ref_dir)
+        ref_dir = "./50_docs/"
+        if sys.argv[2] == "TConv":
+            hyp_dir = '../HROUGE_data/summaries/system_tconvs2s/'
+        elif sys.argv[2] == "PT":
+            hyp_dir = '../HROUGE_data/summaries/system_ptgen/'
+        elif  sys.argv[2] == "Bert":
+            hyp_dir = '../HROUGE_data/summaries/system_bert/'
+        elif  sys.argv[2] == "BertAlg":
+            hyp_dir = '../HROUGE_data/summaries/system_bertalg/'
+        elif  sys.argv[2] == "Ref":
+            hyp_dir = '../HROUGE_data/summaries/ref_gold/'
+        get_hardy_hrouge(ref_tokens, ref_token_weights, hyp_dir)
     elif sys.argv[1] == "Hardy_rouge":
         ref_dir = "./50_docs/"
         if sys.argv[2] == "TConv":
@@ -248,6 +273,8 @@ if __name__ == '__main__':
             hyp_dir = '../HROUGE_data/summaries/system_ptgen/'
         elif  sys.argv[2] == "Bert":
             hyp_dir = '../HROUGE_data/summaries/system_bert/'
+        elif  sys.argv[2] == "BertAlg":
+            hyp_dir = '../HROUGE_data/summaries/system_bertalg/'
         elif  sys.argv[2] == "Ref":
             hyp_dir = '../HROUGE_data/summaries/ref_gold/'
         get_hardy_rouge(ref_dir, hyp_dir)

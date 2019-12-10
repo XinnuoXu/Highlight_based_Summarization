@@ -67,6 +67,7 @@ def load_gold(gold_highlight_path, doc_trees, task):
         article_lst = doc_trees[doc_id]
         gtruth = get_ground_truth(article_lst, gold_highlight[doc_id], task)
         gtruths[doc_id] = gtruth
+
     return gtruths
 
 def _filter_attn(article_lst, attn, task):
@@ -111,14 +112,16 @@ def get_prediction(attn_dists, article_lst, decoded_lst, task):
         return _prediction_token(article_lst, attn_dists, decoded_lst)
 
 def true_false(g, p):
-    return 1 - spatial.distance.cosine(g > 0 , p > 0.2)
+    g_ = np.array(g)
+    p_ = np.array(p)
+    return 1 - spatial.distance.cosine(g_ > 0 , p_ > 0.2)
 
 def correlation(gtruth, pred, doc_id):
     corrs = []
     p_wight = []; g_weight = []
     for item in pred:
         p_wight.append(np.array(pred[item]))
-    if len(pred) == 0 or len(gtruth) == 0:
+    if len(pred) == 0:
         return -2, -2
     pred = sum(p_wight) / len(pred)
     for item in gtruth:
@@ -129,14 +132,10 @@ def correlation(gtruth, pred, doc_id):
     if sum(gtruth) == 0:
         return -2, -2
     #return pearsonr(pred, gtruth)[0], true_false(pred, gtruth)
-    pred = pred.tolist()
-    gtruth = gtruth.tolist()
-    if len(pred) < 2 or len(gtruth) < 2:
-        return -2, -2
-    return pearsonr(pred, gtruth)[0], 0.0
+    return pearsonr(pred.tolist(), gtruth.tolist())[0], 0.0
 
 def load_auto_alg_simple_format(prediction_path, task):
-    preds = {}
+    preds = {};
     for line in open(prediction_path):
         json_obj = json.loads(line.strip())
         doc_id = json_obj['doc_id']
@@ -153,7 +152,7 @@ def load_auto_alg_simple_format(prediction_path, task):
     return preds
 
 def load_auto_alg(prediction_path, task):
-    preds = {}
+    preds = {}; decode_list = {}
     for filename in os.listdir(prediction_path):
         with open(prediction_path + "/" + filename, 'r') as file:
             json_obj = json.loads(file.read().strip())
@@ -168,7 +167,8 @@ def load_auto_alg(prediction_path, task):
 
         pred = get_prediction(attn_dists, article_lst, decoded_lst, task)
         preds[doc_id] = pred
-    return preds
+        decode_list[doc_id] = ' '.join(decoded_lst)
+    return preds, decode_list
 
 def load_doc_trees(doc_tree_path):
     doc_trees = {}
@@ -180,51 +180,60 @@ def load_doc_trees(doc_tree_path):
             doc_trees[doc_id] = file.read().strip().split()
     return doc_trees
 
-def evaluation(gold_highlight, pred_highlight):
-    corr_all = []; corrs_01 = []
+def eva_debug(gold_highlight, pred_highlight):
+    corr_all = {}
     for doc_id in gold_highlight:
         gtruth = gold_highlight[doc_id]
         pred = pred_highlight[doc_id]
         corr, corr_01 = correlation(gtruth, pred, doc_id)
         if corr > -2:
-            corr_all.append(corr)
-            corrs_01.append(corr_01)
-
-    print (len(corr_all))
-    return sum(corr_all)/len(corr_all), sum(corrs_01)/len(corrs_01)
+            corr_all[doc_id] = corr
+    return corr_all
 
 if __name__ == '__main__':
-    # Load ground truth
-    if sys.argv[1] == "human":
-        doc_trees = load_doc_trees("50_trees/")
-        gold_phrase_path = "AMT_data/alignment_phrase.jsonl"
-        gold_highlight_phrase = load_gold(gold_phrase_path, doc_trees, "phrase")
-        gold_fact_path = "AMT_data/alignment_fact.jsonl"
-        gold_highlight_fact = load_gold(gold_fact_path, doc_trees, "fact")
-    elif sys.argv[1] == "system":
-        prediction_path = "Bert_highlight/"
-        gold_highlight_phrase = load_auto_alg(prediction_path, "phrase")
-        gold_highlight_fact = load_auto_alg(prediction_path, "fact")
-    elif sys.argv[1] == "auto_full":
-        prediction_path = "/scratch/xxu/system_trees/" + sys.argv[2] + "_gold.alg"
-        gold_highlight_phrase = load_auto_alg_simple_format(prediction_path, "phrase")
-        gold_highlight_fact = load_auto_alg_simple_format(prediction_path, "fact")
+    # Load human highlight
+    doc_trees = load_doc_trees("50_trees/")
+    gold_phrase_path = "AMT_data/alignment_phrase.jsonl"
+    human_highlight_phrase = load_gold(gold_phrase_path, doc_trees, "phrase")
+    gold_fact_path = "AMT_data/alignment_fact.jsonl"
+    human_highlight_fact = load_gold(gold_fact_path, doc_trees, "fact")
 
-    # Load system alignment
-    if sys.argv[1] == "auto_full":
-        prediction_path = "/scratch/xxu/system_trees/" + sys.argv[2] + "_full.alg"
-        highlight_phrase = load_auto_alg_simple_format(prediction_path, "phrase")
-        highlight_fact = load_auto_alg_simple_format(prediction_path, "fact")
-    else:
-        prediction_path = "system_trees/" + sys.argv[2]
-        highlight_phrase = load_auto_alg(prediction_path, "phrase")
-        highlight_fact = load_auto_alg(prediction_path, "fact")
-        
-    # Calculate correlation
-    fact_merge, fact_01 = evaluation(gold_highlight_fact, highlight_fact)
-    phrase_merge, phrase_01 = evaluation(gold_highlight_phrase, highlight_phrase)
+    # Load gold summary highlight
+    prediction_path = "Bert_highlight/"
+    gold_highlight_phrase, gold_decode_list = load_auto_alg(prediction_path, "phrase")
+    gold_highlight_fact, _ = load_auto_alg(prediction_path, "fact")
 
-    #print ("fact_single, fact_merge ", fact_single, fact_merge)
-    #print ("phrase_single, phrase_merge ", phrase_single, phrase_merge)
-    print ("fact", fact_merge, fact_01)
-    print ("phrase", phrase_merge, phrase_01)
+    systems = ["bert", "bertalg", "ptgen", "tconvs2s"]
+    systems_res = {}
+    for s in systems:
+        # Load system alignment
+        prediction_path = "system_trees/system_" + s + ".alg"
+        highlight_phrase, system_docode_list = load_auto_alg(prediction_path, "phrase")
+        highlight_fact,_  = load_auto_alg(prediction_path, "fact")
+
+        # Calculate correlation
+        fact_weight = eva_debug(gold_highlight_fact, highlight_fact)
+        phrase_weight = eva_debug(gold_highlight_phrase, highlight_phrase)
+
+        systems_res[s] = (system_docode_list, fact_weight, phrase_weight)
+
+    fpout = open("system_analysis.res", "w")
+    for doc_id in gold_decode_list:
+        outputlist = []
+        for s in systems_res:
+            if doc_id not in systems_res[s][0] or \
+                    doc_id not in systems_res[s][1] or \
+                    doc_id not in systems_res[s][2]:
+                        break
+            decode_list = systems_res[s][0][doc_id]
+            fact_weight = str(systems_res[s][1][doc_id])
+            phrase_weight = str(systems_res[s][2][doc_id])
+            outputs = [doc_id, s.upper(), decode_list, fact_weight, phrase_weight]
+            outputlist.append(outputs)
+        if len(outputlist) == len(systems_res):
+            golds = [doc_id, "GOLD", gold_decode_list[doc_id]]
+            fpout.write("\t".join(golds) + "\n")
+            for outputs in outputlist:
+                fpout.write("\t".join(outputs) + "\n")
+        fpout.write("\n")
+    fpout.close()

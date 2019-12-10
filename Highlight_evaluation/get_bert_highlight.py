@@ -32,12 +32,12 @@ def split_file(tmp_out, fpout_base="./Bert_highlight/"):
         fpout.write(line)
         fpout.close()
 
-def simple_format(tgt_file):
-    fpout = open("tmp.tgt", "w")
+def simple_format(tgt_file, tag):
+    fpout = open("tmp.tgt." + tag, "w")
     for i, line in enumerate(open(tgt_file)):
         fpout.write(line.strip() + "\t" + str(i) + "\n")
     fpout.close()
-    return "tmp.tgt"
+    return "tmp.tgt." + tag
 
 if __name__ == '__main__':
     ids = []
@@ -47,7 +47,7 @@ if __name__ == '__main__':
         tmp_src = sys.argv[2]
         tmp_tgt = sys.argv[3]
         tmp_output = sys.argv[4]
-        tmp_tgt = simple_format(tmp_tgt)
+        tmp_tgt = simple_format(tmp_tgt, sys.argv[3].split("/")[-1].split(".")[0])
         dataset = DataSet(tmp_src, tmp_tgt, tmp_output, thred_num=20)
         dataset.preprocess_mult()
     if sys.argv[1] == "highlight":

@@ -225,7 +225,7 @@ def get_prediction(attn_dists, article_lst, decoded_lst, task):
 def true_false(g, p):
     g_ = np.array(g)
     p_ = np.array(p)
-    return 1 - spatial.distance.cosine(g_ > 0 , p_ > 0.2)
+    return 1 - spatial.distance.cosine(g_ > 0 , p_ > 0)
 
 def res_filter(scores):
     return [s if s > 0.4 else 0.0 for s in scores]
@@ -242,7 +242,7 @@ def correlation(gtruth, pred, doc_id):
             continue
         g = gtruth[item]
         p = pred[item]
-        #p = _top_n_filter(pred[item], 5)
+        p = _top_n_filter(pred[item], 5)
         #print (doc_id, item)
         #print ("g", g)
         #print ("p", p)

@@ -67,6 +67,7 @@ def load_gold(gold_highlight_path, doc_trees, task):
         article_lst = doc_trees[doc_id]
         gtruth = get_ground_truth(article_lst, gold_highlight[doc_id], task)
         gtruths[doc_id] = gtruth
+
     return gtruths
 
 def _filter_attn(article_lst, attn, task):
@@ -111,29 +112,39 @@ def get_prediction(attn_dists, article_lst, decoded_lst, task):
         return _prediction_token(article_lst, attn_dists, decoded_lst)
 
 def true_false(g, p):
-    return 1 - spatial.distance.cosine(g > 0 , p > 0.2)
+    g_ = np.array(g)
+    p_ = np.array(p)
+    return 1 - spatial.distance.cosine(g_ > 0 , p_ > 0.2)
 
 def correlation(gtruth, pred, doc_id):
     corrs = []
-    p_wight = []; g_weight = []
+    p_sum = []; g_sum = []
     for item in pred:
-        p_wight.append(np.array(pred[item]))
-    if len(pred) == 0 or len(gtruth) == 0:
-        return -2, -2
-    pred = sum(p_wight) / len(pred)
-    for item in gtruth:
-        g_weight.append(np.array(gtruth[item]))
-    gtruth = sum(g_weight) / len(gtruth)
-    if sum(pred) == 0:
-        return -2, -2
-    if sum(gtruth) == 0:
-        return -2, -2
-    #return pearsonr(pred, gtruth)[0], true_false(pred, gtruth)
-    pred = pred.tolist()
-    gtruth = gtruth.tolist()
-    if len(pred) < 2 or len(gtruth) < 2:
-        return -2, -2
-    return pearsonr(pred, gtruth)[0], 0.0
+        if item not in gtruth:
+            continue
+        if len(gtruth[item]) == 0 or len(pred[item]) == 0:
+            continue
+        if sum(gtruth[item]) == 0 or sum(pred[item]) == 0:
+            continue
+        g = gtruth[item]
+        p = pred[item]
+        p = _top_n_filter(pred[item], 10)
+        #print (doc_id, item)
+        #print ("g", g)
+        #print ("p", p)
+        #print (pearsonr(g, p)[0])
+        if len(g) < 2 or len(p) < 2:
+            continue
+        p_sum.append(p)
+        g_sum.append(g)
+        corrs.append(pearsonr(g, p)[0])
+    if len(g_sum) == 0 or len(p_sum) == 0:
+        return [], 0, 0
+    g_add = sum(np.array(g_sum)).tolist()
+    p_add = sum(np.array(p_sum)).tolist()
+    if len(g_add) < 2 or len(p_add) < 2:
+        return [], 0, 0
+    return corrs, pearsonr(g_add, p_add)[0], true_false(g_add, p_add)
 
 def load_auto_alg_simple_format(prediction_path, task):
     preds = {}
@@ -178,20 +189,22 @@ def load_doc_trees(doc_tree_path):
         doc_id = filename.split(".")[0]
         with open(doc_tree_path + filename, 'r') as file:
             doc_trees[doc_id] = file.read().strip().split()
+        print (doc_id)
+        print (doc_trees[doc_id])
     return doc_trees
 
 def evaluation(gold_highlight, pred_highlight):
-    corr_all = []; corrs_01 = []
+    corrs = []; corr_all = []; corrs_01 = []
     for doc_id in gold_highlight:
         gtruth = gold_highlight[doc_id]
         pred = pred_highlight[doc_id]
-        corr, corr_01 = correlation(gtruth, pred, doc_id)
-        if corr > -2:
+        corr_detail, corr, corr_01 = correlation(gtruth, pred, doc_id)
+        if len(corr_detail) > 0:
+            corrs.extend(corr_detail)
             corr_all.append(corr)
             corrs_01.append(corr_01)
 
-    print (len(corr_all))
-    return sum(corr_all)/len(corr_all), sum(corrs_01)/len(corrs_01)
+    return sum(corrs)/len(corrs), sum(corr_all)/len(corr_all), sum(corrs_01)/len(corrs_01)
 
 if __name__ == '__main__':
     # Load ground truth
@@ -220,9 +233,10 @@ if __name__ == '__main__':
         highlight_phrase = load_auto_alg(prediction_path, "phrase")
         highlight_fact = load_auto_alg(prediction_path, "fact")
         
+
     # Calculate correlation
-    fact_merge, fact_01 = evaluation(gold_highlight_fact, highlight_fact)
-    phrase_merge, phrase_01 = evaluation(gold_highlight_phrase, highlight_phrase)
+    fact_single, fact_merge, fact_01 = evaluation(gold_highlight_fact, highlight_fact)
+    phrase_single, phrase_merge, phrase_01 = evaluation(gold_highlight_phrase, highlight_phrase)
 
     #print ("fact_single, fact_merge ", fact_single, fact_merge)
     #print ("phrase_single, phrase_merge ", phrase_single, phrase_merge)
