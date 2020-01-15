@@ -227,7 +227,6 @@ def _top_n_filter(tok_align, n):
         return tok_align
     n = min(len(tok_align), n)
     threshold = max(np.sort(tok_align)[-1] * 0.6, np.sort(tok_align)[-n])
-    #threshold = np.sort(tok_align)[-1] * 0.5
     for i in range(len(tok_align)):
         if tok_align[i] < threshold:
             tok_align[i] = 0.0
@@ -383,7 +382,7 @@ class DocSumPair:
         fpout.write(json.dumps(json_obj) + "\n")
 
 class DataSet:
-    def __init__(self, src_path, tgt_path, fpout_path, thred_num=20):
+    def __init__(self, src_path, tgt_path, fpout_path, thred_num=10):
         self.thred_num = thred_num
         self.model_class = BertModel
         self.tokenizer_class = BertTokenizer
