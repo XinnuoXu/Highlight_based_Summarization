@@ -24,14 +24,12 @@ wget https://s3-us-west-2.amazonaws.com/allennlp/models/srl-model-2018.05.25.tar
 
 ## System attacking with 50 documents
 ```
-cd Fact_extraction
+cd Debug
 ```
-Each document has a document ID, for example 36588641. For system attacking, you can write down your summaries in file `debug/doc_ID.data`, for example `debug/36588641.data`. Then run this line to get their semantic role labelling results:
+To try some DIY examples, you should write your examples down in `input.src` and `input.tgt`. `input.src` is for document trees and `input.tgt` is for summaries(just sentences, not trees). Note that, (1) the number of lines in `input.src` is equal to `input.tgt`; (2) lines in `input.src` should be the copy of the first row (sorry for the duplication. I will make it decent soon); (3) the first row in `input.tgt` should be the ground truth. Please find some examples in `input.src` and `input.tgt` in this repository. 
+
+Then run 
 ```
-python fact_extraction_for_debug.py srl 36588641
+sh run.sh
 ```
-and this line to get the fact tree structure:
-```
-python fact_extraction_for_debug.py tree 36588641
-```
-It will generate a directory `debug/doc_ID.tree/`, in this case `debug/36588641.tree/`.
+it will create a directory called `output/`, in which `corr.txt` is the corr scores for each examples. Other `*.txt` are highlight result for each example.
