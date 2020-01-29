@@ -34,7 +34,7 @@ sh run.sh
 ```
 it will create a directory called `output/` containing following files:
 
-* `corr.txt` the corr scores for each examples with the format `document \t summary \t Corr_F \t Corr_A`
+* `corr.txt` is the corr scores for each examples. It's one row per example with the format `document \t summary \t Corr_F \t Corr_A` for each row.
 * `{k}.txt` are details for fact/argument distances in the kth example (<img src="http://latex.codecogs.com/gif.latex?d_{ij}^f" border="0"/> and <img src="http://latex.codecogs.com/gif.latex?d_{ij}^a" border="0"/> in the paper). 
 * `{k}.hl` are fact level weights <img src="http://latex.codecogs.com/gif.latex?\mathbf{w}_\ast^f" border="0"/> for the kth example.
 
