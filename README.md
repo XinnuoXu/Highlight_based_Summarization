@@ -36,7 +36,9 @@ it will create a directory called `output/` containing following files:
 
 * `corr.txt` the corr scores for each examples with the format `document \t summary \t Corr_F \t Corr_A`
 * other `*.txt (* is numbers starting from 0 to the number of your examples)` are details for fact/argument distances. <img src="http://latex.codecogs.com/gif.latex?d_{ij}^f" border="0"/> and <img src="http://latex.codecogs.com/gif.latex?d_{ij}^a" border="0"/> in paper. 
-* other `*.hl (* is numbers starting from 0 to the number of your examples)` are fact level weights <img src="http://latex.codecogs.com/gif.latex?\mathbf{w}_\ast^f" border="0"/>
+* other `*.hl (* is numbers starting from 0 to the number of your examples)` are fact level weights <img src="http://latex.codecogs.com/gif.latex?\mathbf{w}_\ast^f" border="0"/>.
+
+
 
 
 
