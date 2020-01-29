@@ -46,5 +46,7 @@ sh run_service.sh
 
 You can view the visualization result by visiting http://localhost:8000 is your web browser.
 
+![alt text](https://github.com/XinnuoXu/Highlight_based_Summarization/blob/master/display/distance.png)
+
 
 
