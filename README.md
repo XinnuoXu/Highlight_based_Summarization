@@ -32,4 +32,9 @@ Then run
 ```
 sh run.sh
 ```
-it will create a directory called `output/`, in which `corr.txt` is the corr scores for each examples. Other `*.txt` are highlight result for each example.
+it will create a directory called `output/` containing following files:
+
+* `corr.txt` the corr scores for each examples with the format `document \t summary \t Corr_F \t Corr_A`
+* other `*.txt (* is numbers starting from 0 to the number of your examples)` are fact/argument breakdown highlight for each example. $z_a$
+* other `*.hl (* is numbers starting from 0 to the number of your examples)` are fact level 
+
