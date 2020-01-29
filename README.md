@@ -23,12 +23,19 @@ wget https://s3-us-west-2.amazonaws.com/allennlp/models/srl-model-2018.05.25.tar
 ```
 
 ## System attacking with 50 documents
+
+### Step1: Create your examples
 ```
 cd Debug
 ```
-To try some DIY examples, you should write your examples down in `input.src` and `input.tgt`. `input.src` is for document trees and `input.tgt` is for summaries(just sentences, not trees). Note that, (1) the number of lines in `input.src` is equal to `input.tgt`; (2) lines in `input.src` should be the copy of the first row (sorry for the duplication. I will make it decent soon); (3) the first row in `input.tgt` should be the ground truth. Please find some examples in `input.src` and `input.tgt` in this repository. 
+To try some DIY examples, you should write your examples down in `input.src` and `input.tgt`. `input.src` is for document trees and `input.tgt` is for summaries(just sentences, not trees). Note that
 
-Then run 
+* the number of lines in `input.src` is equal to `input.tgt`
+* lines in `input.src` should be the copy of the first row (sorry for the duplication. I will make it decent soon)
+* the first row in `input.tgt` should be the ground truth. Please find some examples in `input.src` and `input.tgt` in this repository. 
+
+### Step2: Get Corr scores and debug information
+
 ```
 sh run.sh
 ```
@@ -37,6 +44,8 @@ it will create a directory called `output/` containing following files:
 * `corr.txt` is the corr scores for each examples. It's one row per example with the format `document \t summary \t Corr_F \t Corr_A` for each row.
 * `{k}.txt` are details for fact/argument distances in the kth example (<img src="http://latex.codecogs.com/gif.latex?d_{ij}^f" border="0"/> and <img src="http://latex.codecogs.com/gif.latex?d_{ij}^a" border="0"/> in the paper). 
 * `{k}.hl` are fact level weights <img src="http://latex.codecogs.com/gif.latex?\mathbf{w}_\ast^f" border="0"/> for the kth example.
+
+### Step3: Visualization
 
 To visualize the fact/argument distances and fact level weights, you can copy the file you are interested in to `../display/` and replace it to the file `attn_vis_data.json`. Then run
 
