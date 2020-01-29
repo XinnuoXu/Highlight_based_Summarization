@@ -74,8 +74,8 @@ def get_attn_dists(attn_dists, article_lst, decoded_lst):
     return  _fact_to_token_weight(article_lst, fact_weights)
 
 
-if __name__ == '__main__':
-    filename = "output/" + sys.argv[1] + ".txt"
+def plot_data(tag):
+    filename = "output/" + tag + ".txt"
     label = "[SUM]"
 
     with open(filename, 'r') as file:
@@ -93,9 +93,16 @@ if __name__ == '__main__':
     json_obj['article_lst'] = new_article_lst
     json_obj['decoded_lst'] = new_decoded_lst
     json_obj['p_gens'] = [0] * len(new_decoded_lst)
+    json_obj['p_gens'][0] = 0.8
     json_obj['attn_dists'] = new_attn_dists
     json_obj["abstract_str"] = "..."
 
-    fpout = open("output/" + sys.argv[1] + ".hl", "w")
+    fpout = open("output/" + tag + ".hl", "w")
     fpout.write(json.dumps(json_obj) + "\n")
     fpout.close()
+
+if __name__ == '__main__':
+    for filename in os.listdir("./output"):
+        if filename.endswith('.txt') and filename != "corr.txt":
+            tag = filename.replace(".txt", "")
+            plot_data(tag)
