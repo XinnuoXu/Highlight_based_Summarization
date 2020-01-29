@@ -23,11 +23,10 @@ wget https://s3-us-west-2.amazonaws.com/allennlp/models/srl-model-2018.05.25.tar
 ```
 
 ## System attacking with 50 documents
-
-### Step1: Create your examples
 ```
 cd Debug
 ```
+### Step1: Create your examples
 To try some DIY examples, you should write your examples down in `input.src` and `input.tgt`. `input.src` is for document trees and `input.tgt` is for summaries(just sentences, not trees). Note that
 
 * the number of lines in `input.src` is equal to `input.tgt`
@@ -36,10 +35,7 @@ To try some DIY examples, you should write your examples down in `input.src` and
 
 ### Step2: Get Corr scores and debug information
 
-```
-sh run.sh
-```
-it will create a directory called `output/` containing following files:
+Run `sh run.sh`. it will create a directory called `output/` containing following files:
 
 * `corr.txt` is the corr scores for each examples. It's one row per example with the format `document \t summary \t Corr_F \t Corr_A` for each row.
 * `{k}.txt` are details for fact/argument distances in the kth example (<img src="http://latex.codecogs.com/gif.latex?d_{ij}^f" border="0"/> and <img src="http://latex.codecogs.com/gif.latex?d_{ij}^a" border="0"/> in the paper). 
