@@ -38,8 +38,13 @@ it will create a directory called `output/` containing following files:
 * `{k}.txt` are details for fact/argument distances in the kth example (<img src="http://latex.codecogs.com/gif.latex?d_{ij}^f" border="0"/> and <img src="http://latex.codecogs.com/gif.latex?d_{ij}^a" border="0"/> in the paper). 
 * `{k}.hl` are fact level weights <img src="http://latex.codecogs.com/gif.latex?\mathbf{w}_\ast^f" border="0"/> for the kth example.
 
+To visualize the fact/argument distances and fact level weights, you can copy the file you are interested in to `display/` and replace the file `attn_vis_data.json` with it. Then run
 
+```
+sh run_service.sh
+```
 
+You can view the visualization result by visiting http://localhost:8000 is your web browser.
 
 
 
