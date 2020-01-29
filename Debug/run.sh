@@ -6,3 +6,5 @@ echo "[LOG] Get highlight..."
 python get_hl.py
 echo "[LOG] Get correlation scores..."
 python get_score.py
+echo "[LOG] Get files for plots..."
+python for_plot.py
