@@ -160,6 +160,14 @@ def eva_debug(highlights):
         corr_all[doc_id] = corr
     return corr_all
 
+def format_tansfer(highlight):
+    new_hl = []
+    for line in highlight:
+        jobj = json.loads(line)
+        jobj['p_gens'] = [item if item >= 0 else 0 for item in jobj['p_gens']]
+        new_hl.append(json.dumps(jobj))
+    return new_hl
+
 if __name__ == '__main__':
     prediction_path = "tmp.hl"
     hl_phrase = load_auto_alg_simple_format(prediction_path, "phrase")
@@ -173,7 +181,7 @@ if __name__ == '__main__':
     os.system("rm -rf output; mkdir output")
     src = [line.strip() for line in open("input.src")]
     tgt = [line.strip() for line in open("input.tgt")]
-    hl = [line.strip() for line in open("tmp.hl")]
+    hl = format_tansfer([line.strip() for line in open("tmp.hl")])
     fpout_res = open("output/corr.txt", "w")
     for i, s in enumerate(src):
         idx = str(i)

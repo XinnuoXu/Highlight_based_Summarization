@@ -86,19 +86,13 @@ if __name__ == '__main__':
     attn_dists = json_obj['attn_dists']
     new_decoded_lst, p_gens = get_p_gens(attn_dists, decoded_lst)
     new_article_lst, token_weights = get_attn_dists(attn_dists, article_lst, decoded_lst)
-    #new_attn_dists = [[0] * len(new_article_lst) for i in range(len(new_decoded_lst))]
-
-    new_attn_dists = attn_dists
+    new_attn_dists = [[0] * len(new_article_lst) for i in range(len(new_decoded_lst))]
     new_attn_dists.insert(0, token_weights)
-
     new_decoded_lst.insert(0, label)
-
-    new_p_gens = [item if item >= 0 else 0 for item in json_obj['p_gens']]
-    new_p_gens.insert(0, 0.5)
 
     json_obj['article_lst'] = new_article_lst
     json_obj['decoded_lst'] = new_decoded_lst
-    json_obj['p_gens'] = new_p_gens
+    json_obj['p_gens'] = [0] * len(new_decoded_lst)
     json_obj['attn_dists'] = new_attn_dists
     json_obj["abstract_str"] = "..."
 
