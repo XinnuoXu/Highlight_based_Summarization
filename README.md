@@ -22,7 +22,7 @@ pip install allennlp
 wget https://s3-us-west-2.amazonaws.com/allennlp/models/srl-model-2018.05.25.tar.gz
 ```
 
-## System attacking with 50 documents
+## System attacking
 ```
 cd Debug
 ```
