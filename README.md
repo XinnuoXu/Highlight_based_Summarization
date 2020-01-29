@@ -38,5 +38,5 @@ it will create a directory called `output/` containing following files:
 * other `*.txt (* is numbers starting from 0 to the number of your examples)` are fact/argument breakdown highlight for each example. $z_a$
 * other `*.hl (* is numbers starting from 0 to the number of your examples)` are fact level 
 
-<img src="http://latex.codecogs.com/gif.latex?1+sin(x)" border="0"/>
+<img src="http://latex.codecogs.com/gif.latex?d_{ij}^f" border="0"/>
 
