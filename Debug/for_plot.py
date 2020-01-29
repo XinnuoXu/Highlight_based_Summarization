@@ -76,7 +76,7 @@ def get_attn_dists(attn_dists, article_lst, decoded_lst):
 
 def plot_data(tag):
     filename = "output/" + tag + ".txt"
-    label = "[SUM]"
+    label = "[FACT WEIGHT]"
 
     with open(filename, 'r') as file:
         json_obj = json.loads(file.read().strip())
