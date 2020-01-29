@@ -32,4 +32,19 @@ Then run
 ```
 sh run.sh
 ```
-it will create a directory called `output/`, in which `corr.txt` is the corr scores for each examples. Other `*.txt` are highlight result for each example.
+it will create a directory called `output/` containing following files:
+
+* `corr.txt` is the corr scores for each examples. It's one row per example with the format `document \t summary \t Corr_F \t Corr_A` for each row.
+* `{k}.txt` are details for fact/argument distances in the kth example (<img src="http://latex.codecogs.com/gif.latex?d_{ij}^f" border="0"/> and <img src="http://latex.codecogs.com/gif.latex?d_{ij}^a" border="0"/> in the paper). 
+* `{k}.hl` are fact level weights <img src="http://latex.codecogs.com/gif.latex?\mathbf{w}_\ast^f" border="0"/> for the kth example.
+
+To visualize the fact/argument distances and fact level weights, you can copy the file you are interested in to `../display/` and replace it to the file `attn_vis_data.json`. Then run
+
+```
+sh run_service.sh
+```
+
+You can view the visualization result by visiting http://localhost:8000 is your web browser.
+
+
+
