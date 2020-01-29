@@ -38,3 +38,5 @@ it will create a directory called `output/` containing following files:
 * other `*.txt (* is numbers starting from 0 to the number of your examples)` are fact/argument breakdown highlight for each example. $z_a$
 * other `*.hl (* is numbers starting from 0 to the number of your examples)` are fact level 
 
+http://latex.codecogs.com/svg.latex?d_%7Bij%7D%5E%7Bf%7D
+
