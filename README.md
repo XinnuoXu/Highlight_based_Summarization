@@ -43,7 +43,7 @@ Run `sh run.sh`. it will create a directory called `output/` containing followin
 
 ### Step3: Visualization
 
-To visualize the fact/argument distances and fact level weights, you can copy the file you are interested in to `../display/` and replace it to the file `attn_vis_data.json`. Then run
+To visualize the fact/argument distances (`{k}.txt`) and fact level weights (`{k}.hl`), you can copy the file you are interested in to `../display/` and replace it to the file `attn_vis_data.json`. Then run
 
 ```
 sh run_service.sh
@@ -51,7 +51,11 @@ sh run_service.sh
 
 You can view the visualization result by visiting http://localhost:8000 is your web browser.
 
+Here is an example for fact distance of `F2-sent` in the summary. Note that, you need to put your mouse on the `F2-sent` to make the highlights show up.
 ![alt text](https://github.com/XinnuoXu/Highlight_based_Summarization/blob/master/display/distance.png)
+
+Here is an example for fact level weights for an example. Note that, you need to put your mouse on the `[FACT WEIGHTS]` to make the highlights show up.
+![alt text](https://github.com/XinnuoXu/Highlight_based_Summarization/blob/master/display/weights.png)
 
 
 
