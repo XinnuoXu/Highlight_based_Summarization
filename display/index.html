@@ -29,7 +29,7 @@ and available here:
     font-size: 15px;
   }
   </style>
-  <script>
+  <script type="text/javascript">
 
   json_fname = "attn_vis_data.json" // file containing the text and the weights
 
@@ -164,6 +164,11 @@ and available here:
   }
 
   function get_json_and_disp() {
+    
+    selected = $("#file-select option:selected");
+    if (selected.length > 0){
+        json_fname = selected.first().text();
+    }
     // Retrieve the json data file and display the data
     console.log("fetching " + json_fname + "...")
 
@@ -186,9 +191,21 @@ and available here:
     $.getJSON(json_fname, json_success).fail(json_fail);
   }
 
+  function get_file_list() {
+    $.get('/!list', function (data){
+        if (data){
+            data = data.split("\n");
+            $.each(data, function(index, value){
+                $("#file-select").append("<option value=\"" + value  + "\">" + value + "</option>");
+            });
+        }
+        get_json_and_disp()
+    });
+  }
+
   function start() {
     console.log("start")
-    get_json_and_disp()
+    get_file_list()
 
     // Define a tooltip that we will use to display generation probability of a decoder word when you hover over it
     var tooltip = d3.select("body")
@@ -207,6 +224,9 @@ and available here:
   </head>
   <body onload="start();">
     <div id="wrap">
+      <div id="select">
+        Select file to display: <select id="file-select" onchange="get_json_and_disp()"></select>
+      </div>
       <div id="curr_datafile">
         Current datafile name goes here.
       </div>

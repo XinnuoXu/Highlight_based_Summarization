@@ -1,1 +1,3 @@
-python -m SimpleHTTPServer
+#!/bin/sh
+
+python3 service.py $1
