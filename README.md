@@ -1,4 +1,5 @@
 # CorrFA_for_Summarizaion
+Corr F/A evaluation metrics in paper "Fact-based Content Weighting for Evaluating Abstractive Summarisation" under reviewing of ACL2020
 
 ## Environment setup
 
