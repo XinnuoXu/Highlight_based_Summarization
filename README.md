@@ -1,4 +1,4 @@
-# Highlight_based_Summarization
+# CorrFA_for_Summarizaion
 
 ## Environment setup
 
