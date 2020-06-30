@@ -388,7 +388,7 @@ class DataSet:
         self.tokenizer_class = BertTokenizer
         self.pretrained_weights = 'bert-base-uncased'
         self.tokenizer = self.tokenizer_class.from_pretrained(self.pretrained_weights)
-        self.model = self.model_class.from_pretrained(self.pretrained_weights).to('cuda')
+        self.model = self.model_class.from_pretrained(self.pretrained_weights, cache_dir="./temp_dir").to('cuda')
         if thred_num > -1:
             self.pool = multiprocessing.Pool(processes=self.thred_num)
         else:
@@ -447,8 +447,9 @@ class DataSet:
             if (i+1)%BATCH_SIZE == 0:
                 batch_id = self.pad(tmp_examples)
                 batch_id = torch.tensor(batch_id).to('cuda')
+                self.model.eval()
                 with torch.no_grad():
-                    last_hidden_states = self.model(batch_id)[0].cpu().numpy()
+                    last_hidden_states = self.model(batch_id, attention_mask=~(batch_id == 0))[0].cpu().numpy()
                 # multi threads
                 exs = []
                 for j, ex in enumerate(tmp_examples):
@@ -463,8 +464,11 @@ class DataSet:
         if len(tmp_examples) > 0:
             batch_id = self.pad(tmp_examples)
             batch_id = torch.tensor(batch_id).to('cuda')
+            self.model.eval()
             with torch.no_grad():
-                last_hidden_states = self.model(batch_id)[0].cpu().numpy()
+                last_hidden_states = self.model(batch_id, attention_mask=~(batch_id == 0))[0].cpu().numpy()
+            #print (~(batch_id == 0)[0])
+            #print (last_hidden_states[0])
             # multi threads
             exs = []
             for j, ex in enumerate(tmp_examples):
@@ -473,25 +477,6 @@ class DataSet:
             for js in result_list:
                 if js != "":
                     self.fpout.write(js + "\n")
-
-    def get_BERT_emb(self):
-        tmp_examples = []
-        for i, src in enumerate(self.in_src):
-            src_list = []
-            for item in src.split("\t"):
-                clean_item = self.clean(item)
-                if clean_item != "":
-                    src_list.append(clean_item)
-            tgt = self.clean(self.in_tgt[i])
-            tmp_examples.append(DocSumPair(src_list, tgt, self.tokenizer))
-            if (i+1)%BATCH_SIZE == 0:
-                batch_id = self.pad(tmp_examples)
-                batch_id = torch.tensor(batch_id).to('cuda')
-                with torch.no_grad():
-                    last_hidden_states = self.model(batch_id)[0].cpu().numpy()
-                for j, ex in enumerate(tmp_examples):
-                    ex.get_emb(last_hidden_states[j])
-                    ex.write_out_emb(self.fpout_emb)
 
 def multiprocessing_func(args):
     (ex, last_hidden_states, stop_words, doc_id) = args
